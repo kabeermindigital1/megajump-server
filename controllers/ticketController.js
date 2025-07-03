@@ -128,6 +128,7 @@ exports.cancelTicket = async (req, res) => {
 
 // ✅ VERIFY TICKET (QR SCAN)
 exports.verifyTicket = async (req, res) => {
+  console.log("Request Body:", req.body);
   try {
     const { ticketId } = req.body;
 
@@ -152,8 +153,11 @@ exports.verifyTicket = async (req, res) => {
     ticket.isUsed = true;
     await ticket.save();
 
+    console.log("Ticket Data Sent:", ticket); // ✅ See full data in terminal
+
     res.json({ success: true, message: 'Ticket verified and marked as used', ticket });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+

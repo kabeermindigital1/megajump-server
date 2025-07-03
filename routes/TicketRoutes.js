@@ -7,9 +7,11 @@ const {
   verifyTicket,
 } = require('../controllers/ticketController');
 
-router.post('/', createTicket);           // Create ticket
-router.get('/', getAllTickets);           // Get all tickets
-router.put('/:id/cancel', cancelTicket);  // Cancel ticket
-router.post('/tickets/verify', verifyTicket);// ✅ verify ticket through QR scan application
+// Base path: /api/tickets
+router.post('/', createTicket);           // POST /api/tickets
+router.get('/', getAllTickets);           // GET /api/tickets
+router.put('/:id/cancel', cancelTicket);  // PUT /api/tickets/:id/cancel
 
+// ✅ Fixed verify route — now correctly maps to /api/tickets/verify
+router.post('/verify', verifyTicket);  
 module.exports = router;

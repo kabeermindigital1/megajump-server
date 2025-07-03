@@ -1,13 +1,15 @@
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-require('dotenv').config();
+
 
 const ticketRoutes = require('./routes/TicketRoutes');
 const timeSlotRoutes = require('./routes/TimeSlotRouter');
 const settingRoutes = require('./routes/SettingRouter');
 const adminRoutes = require('./routes/AdminRoutes');
-
+const cancelRequestRoutes = require("./routes/cancelRequest");
+const emailTicketRoutes = require("./routes/emailTicketRoutes");
 const app = express();
 
 // Middleware
@@ -19,7 +21,8 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/timeslots', timeSlotRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/admin', adminRoutes);
-
+app.use("/api/cancel-request", cancelRequestRoutes);
+app.use("/api/email-ticket", emailTicketRoutes);
 // DB Connection + Server Start
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
