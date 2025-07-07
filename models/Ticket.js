@@ -60,6 +60,11 @@ const ticketSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  metadata: {
+    sessionId: { type: String },
+    transactionId: { type: String },
+    windcaveResponse: { type: mongoose.Schema.Types.Mixed },
+  },
 });
 
 // ✅ Automatically generate ticketId before saving

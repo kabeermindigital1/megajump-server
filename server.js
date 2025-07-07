@@ -10,6 +10,7 @@ const settingRoutes = require('./routes/SettingRouter');
 const adminRoutes = require('./routes/AdminRoutes');
 const cancelRequestRoutes = require("./routes/cancelRequest");
 const emailTicketRoutes = require("./routes/emailTicketRoutes");
+const paymentRoutes = require('./routes/PaymentRoutes');
 const app = express();
 
 // Middleware
@@ -23,6 +24,7 @@ app.use('/api/settings', settingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use("/api/cancel-request", cancelRequestRoutes);
 app.use("/api/email-ticket", emailTicketRoutes);
+app.use('/api/payment', paymentRoutes);
 // DB Connection + Server Start
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
