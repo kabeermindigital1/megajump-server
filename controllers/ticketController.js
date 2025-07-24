@@ -86,7 +86,24 @@ exports.createTicket = async (req, res) => {
     });
   }
 };
+// Hardcoded admin credentials (for now)
+const ADMIN_EMAIL = 'admin';
+const ADMIN_PASSWORD = '123456'; // Replace with env or hash check in production
 
+exports.deleteAllTicketsWithAuth = async (req, res) => {
+  const { email, password } = req.body;
+
+  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ success: false, message: '❌ Invalid admin credentials.' });
+  }
+
+  try {
+    const result = await Ticket.deleteMany({});
+    res.json({ success: true, message: `✅ Deleted ${result.deletedCount} tickets.` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: '❌ Failed to delete tickets.', error: err.message });
+  }
+};
 
 // ✅ Get all tickets
 exports.getAllTickets = async (req, res) => {

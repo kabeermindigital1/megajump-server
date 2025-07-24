@@ -1,213 +1,208 @@
-const axios = require("axios");
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Ticket = require("../models/Ticket");
 const TimeSlot = require("../models/TimeSlot");
-const { v4: uuidv4 } = require("uuid");
-const PendingTicket = require("../models/PendingTicket");
 
-// 📌 POST /api/payment/session
+// POST /api/payment/session
 exports.createSession = async (req, res) => {
   try {
     const {
+      date, startTime, endTime, tickets: requestedTickets, subtotal, amount,
+      name, surname, email, socksCount, selectedBundel, administrationFee,
+      totalAddOnAmount, isCashPayment = false, skipSlotCheck = false,
+      couponCode, phone, addon, addonData
+    } = req.body;
+
+    if (!date || !startTime || !endTime || !requestedTickets || !amount || !name || !surname || !email) {
+      return res.status(400).json({ success: false, message: "Missing required booking information." });
+    }
+
+    if (!skipSlotCheck) {
+      const slot = await TimeSlot.findOne({ date, startTime, endTime });
+      if (!slot) return res.status(404).json({ success: false, message: "Time slot not found." });
+
+      const existing = await Ticket.aggregate([
+        { $match: { date, startTime, endTime, cancelTicket: false } },
+        { $group: { _id: null, totalSold: { $sum: "$tickets" } } },
+      ]);
+      const sold = existing[0]?.totalSold || 0;
+      const remaining = slot.maxTickets - sold;
+
+      if (requestedTickets > remaining) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${remaining} tickets left.`,
+          remaining,
+        });
+      }
+    }
+
+    // Save initial ticket
+    const ticket = new Ticket({
       date,
       startTime,
       endTime,
       tickets: requestedTickets,
-      subtotal,
       amount,
+      subtotal,
       name,
       surname,
       email,
-    } = req.body;
-
-    // 🔍 Validate fields
-    if (!date || !startTime || !endTime || !requestedTickets || !amount || !name || !surname || !email) {
-      console.error("❌ Missing booking fields", req.body);
-      return res.status(400).json({ success: false, message: "Missing required booking information." });
-    }
-
-    const slot = await TimeSlot.findOne({ date, startTime, endTime });
-    if (!slot) {
-      console.error("❌ Slot not found:", { date, startTime, endTime });
-      return res.status(404).json({ success: false, message: "Time slot not found." });
-    }
-
-    const existing = await Ticket.aggregate([
-      { $match: { date, startTime, endTime, cancelTicket: false } },
-      { $group: { _id: null, totalSold: { $sum: "$tickets" } } },
-    ]);
-    const sold = existing[0]?.totalSold || 0;
-    const remaining = slot.maxTickets - sold;
-
-    if (requestedTickets > remaining) {
-      return res.status(400).json({
-        success: false,
-        message: `Only ${remaining} tickets left.`,
-        remaining,
-      });
-    }
-
-    const merchantReference = `MJ-${Date.now()}`;
-    const sessionPayload = {
-      type: "purchase",
-      amount: amount.toFixed(2),
-      currency: "NZD",
-      merchantReference,
-      methods: ["card"],
-      customer: {
-        email,
-        name: `${name} ${surname}`,
-      },
-      notificationUrl: `${process.env.BASE_URL}/api/payment/notification`,
-      callbackUrls: {
-        approved: `${process.env.FRONTEND_URL}/ticket-booking?session=success`,
-        declined: `${process.env.FRONTEND_URL}/ticket-booking?session=declined`,
-        cancelled: `${process.env.FRONTEND_URL}/ticket-booking?session=cancelled`,
-      },
+      phone,
+      socksCount,
+      selectedBundel,
+      administrationFee,
+      totalAddOnAmount,
+      isCashPayment,
+      skipSlotCheck,
+      couponCode,
+      paymentStatus: 'pending',
+      addon,
+      addonData,
       metadata: {
-        bookingInfo: JSON.stringify(req.body),
-      },
-    };
-
-    console.log("🔍 Windcave Session Payload:", sessionPayload);
-
-    const username = process.env.WINDCAVE_USERNAME;
-    const apiKey = process.env.WINDCAVE_API_KEY;
-    const apiUrl = process.env.WINDCAVE_API_URL;
-
-    if (!username || !apiKey || !apiUrl) {
-      return res.status(500).json({ success: false, message: "Payment config error." });
-    }
-
-    const authHeader = "Basic " + Buffer.from(`${username}:${apiKey}`).toString("base64");
-
-    const sessionRes = await axios.post(`${apiUrl}/sessions`, sessionPayload, {
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
+        source: 'online',
+        paymentMethod: 'stripe',
+      }
     });
 
-    const hppLink = sessionRes.data.links.find(link => link.rel === "hpp");
+    await ticket.save();
 
-    if (!hppLink) {
-      return res.status(500).json({ success: false, message: "HPP link not found." });
-    }
-
-    // ✅ Save pending ticket info
-    await PendingTicket.create({
-      sessionId: sessionRes.data.id,
-      bookingInfo: req.body,
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'payment',
+      customer_email: email,
+      line_items: [{
+        price_data: {
+          currency: 'eur',
+          product_data: { name: 'MegaJump Tickets' },
+          unit_amount: Math.round(subtotal * 100),
+        },
+        quantity: 1,
+      }],
+      metadata: {
+        ticketId: ticket._id.toString(),
+      },
+      success_url: `${process.env.FRONTEND_URL}/ticket-booking?session=success&sessionId={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/ticket-booking?session=cancelled`,
     });
-    console.log("📝 Saved pending booking info for session:", sessionRes.data.id);
 
-    console.log("✅ Session Created:", sessionRes.data.id);
-    console.log("🔗 Redirect URL:", hppLink.href);
+    console.log('🟦 Stripe session created:', JSON.stringify(session, null, 2));
+
+    // Save only session ID now (paymentIntent will come via webhook)
+    ticket.metadata.stripeSessionId = session.id;
+    await ticket.save();
 
     return res.status(200).json({
       success: true,
-      message: "Session created.",
-      sessionId: sessionRes.data.id,
-      checkoutUrl: hppLink.href,
+      sessionId: session.id,
+      checkoutUrl: session.url,
     });
+
   } catch (err) {
-    console.error("❌ Session error:", err.response?.data || err.message);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create session.",
-      error: err.response?.data || err.message,
-    });
+    console.error("❌ Error creating session:", err.message);
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// 📌 POST /api/payment/notification
-exports.handleNotification = async (req, res) => {
-  try {
-    const sessionId = req.body.sessionId || req.query.sessionId;
-    if (!sessionId) {
-      console.error("❌ Missing sessionId in webhook");
-      return res.status(400).json({ success: false, message: "Missing sessionId." });
-    }
-
-    console.log("📨 Webhook triggered for session:", sessionId);
-
-    const sessionRes = await axios.get(`${process.env.WINDCAVE_API_URL}/sessions/${sessionId}`, {
-      headers: {
-        Authorization: 'Basic ' + Buffer.from(`${process.env.WINDCAVE_USERNAME}:${process.env.WINDCAVE_API_KEY}`).toString('base64'),
-        "Content-Type": "application/json",
-      },
-    });
-
-    const session = sessionRes.data;
-    console.log("📨 Full session object received:", JSON.stringify(session, null, 2));
-
-    const transaction = session.transactions?.[0];
-    if (!transaction || !transaction.authorised) {
-      console.error("❌ Transaction not authorized or missing.");
-      return res.status(400).json({ success: false, message: "Payment not authorized." });
-    }
-
-    const pending = await PendingTicket.findOne({ sessionId });
-    if (!pending) {
-      console.error("❌ No pending booking found for session:", sessionId);
-      return res.status(400).json({ success: false, message: "Missing booking info for session." });
-    }
-
-    const bookingInfo = pending.bookingInfo;
-
-    console.log("📦 Creating ticket with recovered pending info:", {
-      sessionId,
-      transactionId: transaction.id,
-    });
-
-    const newTicket = new Ticket({
-      ...bookingInfo,
-      metadata: {
-        sessionId,
-        transactionId: transaction.id,
-        windcaveResponse: transaction,
-      },
-    });
-
-    await newTicket.save();
-    await PendingTicket.deleteOne({ sessionId });
-    console.log("✅ Ticket saved to DB:", newTicket._id);
-    console.log("🧹 Cleaned up pending ticket for session:", sessionId);
-
-    return res.status(200).json({ success: true, message: "Ticket saved.", ticket: newTicket });
-
-  } catch (err) {
-    console.error("❌ Notification error:", err.response?.data || err.message, {
-      stack: err.stack,
-    });
-    return res.status(500).json({
-      success: false,
-      message: "Error handling notification.",
-      error: err.response?.data || err.message,
-    });
-  }
-};
-
-// 📌 GET /api/payment/session-result/:sessionId
+// GET /api/payment/session-result/:sessionId
 exports.getTicketBySession = async (req, res) => {
   try {
     const sessionId = req.params.sessionId;
-    const ticket = await Ticket.findOne({ "metadata.sessionId": sessionId });
+    const ticket = await Ticket.findOne({ "metadata.stripeSessionId": sessionId });
+
     if (!ticket) {
+      console.warn("⚠️ No ticket found for session ID:", sessionId);
       return res.status(404).json({ success: false, message: "Ticket not found." });
     }
 
-    console.log("🎫 Ticket retrieved by sessionId:", sessionId);
-    return res.status(200).json({
-      success: true,
-      message: "Ticket found.",
-      ticket,
-    });
+    return res.status(200).json({ success: true, message: "Ticket found.", ticket });
+
   } catch (err) {
-    console.error("❌ Error fetching ticket by sessionId:", err.message);
-    return res.status(500).json({
-      success: false,
-      message: "Error fetching ticket.",
-      error: err.message,
-    });
+    console.error("❌ Error retrieving ticket:", err.message);
+    return res.status(500).json({ success: false, message: "Server error.", error: err.message });
   }
+};
+
+// POST /api/payment/webhook
+exports.handleWebhook = async (req, res) => {
+  console.log('🚦 [WEBHOOK] Endpoint hit');
+  console.log('📝 Raw body received');
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    console.log('✅ [WEBHOOK] Event type:', event.type);
+  } catch (err) {
+    console.error('❌ [WEBHOOK] Signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const ticketId = session.metadata?.ticketId;
+
+    console.log('✅ [WEBHOOK] Session completed for session ID:', session.id);
+    console.log('🔑 ticketId from metadata:', ticketId);
+
+    if (!ticketId) {
+      console.error('❌ No ticketId found in metadata');
+      return res.status(400).send('Missing ticket ID in metadata.');
+    }
+
+    try {
+      const ticket = await Ticket.findById(ticketId);
+      if (!ticket) {
+        console.error('❌ Ticket not found for ID:', ticketId);
+        return res.status(404).send('Ticket not found.');
+      }
+
+      ticket.paymentStatus = 'processing'; // temporarily mark
+      ticket.metadata.stripeSessionId = session.id;
+
+      await ticket.save();
+      console.log('⏳ [WEBHOOK] Ticket saved with status "processing". Waiting 5 mins to fetch payment_intent...');
+
+      // Wait 5 minutes (300000 ms), then fetch payment intent and update ticket
+      setTimeout(async () => {
+        console.log('\n⏱️ [DELAY] 5 minutes passed. Fetching session again with expand:payment_intent');
+
+        const start = Date.now();
+        try {
+          const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
+            expand: ['payment_intent'],
+          });
+          const duration = Date.now() - start;
+
+          const paymentIntentId = fullSession.payment_intent?.id;
+          const ticketToUpdate = await Ticket.findById(ticketId);
+
+          if (!ticketToUpdate) {
+            console.error('❌ Ticket not found after 5 mins delay');
+            return;
+          }
+
+          if (paymentIntentId) {
+            ticketToUpdate.paymentStatus = 'paid';
+            ticketToUpdate.metadata.stripePaymentIntentId = paymentIntentId;
+            await ticketToUpdate.save();
+
+            console.log(`✅ [DELAYED SAVE] PaymentIntent fetched & saved after ${duration} ms`);
+            console.log('📦 [PaymentIntent object]:\n', JSON.stringify(fullSession.payment_intent, null, 2));
+          } else {
+            console.warn('⚠️ [DELAY] No paymentIntent found even after 5 minutes');
+          }
+        } catch (delayErr) {
+          console.error('❌ [DELAY ERROR] Failed to retrieve or save paymentIntent:', delayErr.message);
+        }
+
+      }, 5 * 60 * 1000); // 5 minutes
+
+    } catch (err) {
+      console.error('❌ Error processing session completed webhook:', err);
+      return res.status(500).send('Internal server error while updating ticket.');
+    }
+  }
+
+  // Always respond to Stripe right away
+  res.status(200).json({ received: true });
 };

@@ -1,11 +1,7 @@
 const mongoose = require('mongoose');
 
 const settingSchema = new mongoose.Schema({
-  locationName: {
-    type: String,
-    required: true,
-    unique: true, // Make it act like a primary key
-  },
+  locationName: { type: String, required: true },
   address: { type: String, required: true },
   startDate: { type: Date, required: true },
   endDate: { type: Date, required: true },

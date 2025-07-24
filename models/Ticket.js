@@ -2,14 +2,9 @@ const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
 const ticketSchema = new mongoose.Schema({
-  ticketId: {
-    type: String,
-    unique: true,
-    index: true,
-  },
+  ticketId: { type: String, unique: true, index: true },
 
   date: String,
-  time: String, // Optional if you're using startTime + endTime
   startTime: String,
   endTime: String,
   timestamp: Number,
@@ -17,7 +12,7 @@ const ticketSchema = new mongoose.Schema({
   tickets: Number,
   amount: Number,
   subtotal: Number,
-
+  administrationFee: Number,
   socksCount: Number,
   cancellationEnabled: Boolean,
   cancellationFee: Number,
@@ -32,46 +27,64 @@ const ticketSchema = new mongoose.Schema({
   couponCode: String,
 
   addonData: {
-    type: {
-      socksCount: Number,
-      cancellationEnabled: Boolean,
-      cancellationFee: Number,
-      totalAddOnAmount: Number,
-    },
+    socksCount: Number,
+    cancellationEnabled: Boolean,
+    cancellationFee: Number,
+    totalAddOnAmount: Number,
   },
 
   termsAccepted: [Boolean],
 
-  cancelTicket: {
-    type: Boolean,
-    default: false,
-  },
-
-  isUsed: {
-    type: Boolean,
-    default: false,
-  },
-
-  qrCodeData: {
+  cancelTicket: { type: Boolean, default: false },
+  refundedAmount: { type: Number, default: 0 },
+  refundStatus: {
     type: String,
+    enum: ["not_requested", "pending", "refunded", "failed"],
+    default: "not_requested",
   },
 
-  createdAt: {
-    type: Date,
-    default: Date.now,
+  bundelSelected: { type: Boolean, default: false },
+  selectedBundel: {
+    name: String,
+    discountPercent: Number,
+    price: Number,
+    description: String,
+    tickets: Number,
   },
+
+  isCashPayment: { type: Boolean, default: false },
+  skipSlotCheck: { type: Boolean, default: false },
+
+  paymentStatus: {
+    type: String,
+    enum: ["paid", "pending", "cash"],
+    default: "pending",
+  },
+  paymentMethod: {
+    type: String,
+    enum: ["card", "cash", "qr"],
+    default: "card",
+  },
+  qrCodePaymentUrl: String,
+
+  refundTransactionId: String,
+  refundDate: Date,
+  isUsed: { type: Boolean, default: false },
+  qrCodeData: String,
+  stripePaymentIntentId: String,
+
+  createdAt: { type: Date, default: Date.now },
   metadata: {
-    sessionId: { type: String },
-    transactionId: { type: String },
-    windcaveResponse: { type: mongoose.Schema.Types.Mixed },
+    sessionId: String,
+    stripeSessionId: String,
+    stripePaymentIntentId: String, // <== Move it here
   },
 });
 
-// ✅ Automatically generate ticketId before saving
 ticketSchema.pre('save', function (next) {
   if (!this.ticketId) {
-    const shortId = uuidv4().split('-')[0].toUpperCase(); // e.g., 'F4A2D9'
-    this.ticketId = `MJX-${shortId}`; // Prefix with your brand or venue
+    const shortId = uuidv4().split('-')[0].toUpperCase();
+    this.ticketId = `MJX-${shortId}`;
   }
   next();
 });
