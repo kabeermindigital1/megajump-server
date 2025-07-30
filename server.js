@@ -14,6 +14,7 @@ const ticketRefundRoutes = require("./routes/ticketRefundRoutes");
 const massRefundRoutes = require("./routes/massRefundRoutes");
 const ticketBundelsRoutes = require("./routes/ticketBundelsRoutes");
 const walkinRoutes = require('./routes/walkinRoutes');
+const discountVoucherRoutes = require('./routes/discountVoucherRoutes');
 const webhookController = require('./controllers/webhookController');
 const paymentRoute = require('./routes/payment');
 const app = express();
@@ -37,6 +38,7 @@ app.use("/api/refund", ticketRefundRoutes);
 app.use("/api/refund", massRefundRoutes); // (same path, different logic?)
 app.use('/api/ticketbundels', ticketBundelsRoutes);
 app.use('/api/walkin', walkinRoutes);
+app.use('/api/discount-vouchers', discountVoucherRoutes);
 app.use('/api/payment', paymentRoute);
 // 📦 MongoDB Connection + App Start
 const PORT = process.env.PORT || 5000;

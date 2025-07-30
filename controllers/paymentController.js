@@ -12,8 +12,13 @@ exports.createSession = async (req, res) => {
       couponCode, phone, addon, addonData
     } = req.body;
 
-    if (!date || !startTime || !endTime || !requestedTickets || !amount || !name || !surname || !email) {
+    if (!date || !startTime || !endTime || !amount || !name || !surname || !email) {
       return res.status(400).json({ success: false, message: "Missing required booking information." });
+    }
+
+    // Check if user has selected either tickets or a bundle
+    if (!requestedTickets && !selectedBundel) {
+      return res.status(400).json({ success: false, message: "Please select either tickets or a bundle to proceed." });
     }
 
     if (!skipSlotCheck) {

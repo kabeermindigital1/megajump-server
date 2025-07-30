@@ -178,3 +178,241 @@ exports.verifyTicket = async (req, res) => {
   }
 };
 
+// ✅ ANALYTICS - Get consolidated ticket sales information
+exports.getTicketAnalytics = async (req, res) => {
+  try {
+    const { period = 'all' } = req.query; // 'all', 'today', 'week', 'month'
+    
+    let dateFilter = {};
+    const now = new Date();
+    
+    if (period === 'today') {
+      const today = now.toISOString().split('T')[0];
+      dateFilter = { date: today };
+    } else if (period === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      dateFilter = { createdAt: { $gte: weekAgo } };
+    } else if (period === 'month') {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      dateFilter = { createdAt: { $gte: monthAgo } };
+    }
+
+    // Get all tickets with filter (including cancelled/refunded tickets)
+    const tickets = await Ticket.find({ ...dateFilter });
+
+    // Calculate analytics
+    const analytics = {
+      period: period,
+      totalSales: 0,           // Number of sales (records)
+      totalTickets: 0,         // Total individual tickets sold
+      totalSocks: 0,
+      totalRevenue: 0,         // Total revenue from subtotal
+      totalProfit: 0,          // Calculated profit
+      bundleSales: 0,          // Number of sales with bundles
+      cashPayments: 0,
+      cardPayments: 0,
+      dailyBreakdown: {},
+      weeklyBreakdown: {},
+      monthlyBreakdown: {},
+      bundleBreakdown: {},
+      paymentMethodBreakdown: {},
+      topSellingDates: [],
+      averageTicketPrice: 0,
+      averageSaleValue: 0,
+      totalRefunds: 0,
+      refundedAmount: 0,
+      usedTickets: 0,
+      unusedTickets: 0
+    };
+
+    // Process each ticket (each record = 1 sale)
+    tickets.forEach(ticket => {
+      // Count this as 1 sale
+      analytics.totalSales += 1;
+      
+      // Calculate total tickets from this sale
+      const regularTickets = ticket.tickets || 0;
+      const bundleTickets = ticket.selectedBundel?.tickets || 0;
+      const totalTicketsInSale = regularTickets + bundleTickets;
+      
+      analytics.totalTickets += totalTicketsInSale;
+      analytics.totalSocks += ticket.socksCount || 0;
+      analytics.totalRevenue += ticket.subtotal || 0;  // Use subtotal for revenue
+      
+      // Calculate profit (assuming 70% profit margin - adjust as needed)
+      const saleProfit = (ticket.subtotal || 0) * 0.7;
+      analytics.totalProfit += saleProfit;
+      
+      // Bundle sales (count sales that have bundles)
+      if (ticket.selectedBundel) {
+        analytics.bundleSales += 1;
+        const bundleName = ticket.selectedBundel.name;
+        analytics.bundleBreakdown[bundleName] = (analytics.bundleBreakdown[bundleName] || 0) + 1;
+      }
+      
+      // Payment methods
+      if (ticket.isCashPayment) {
+        analytics.cashPayments += 1;
+      } else {
+        analytics.cardPayments += 1;
+      }
+      
+      // Daily breakdown
+      const date = ticket.date;
+      if (!analytics.dailyBreakdown[date]) {
+        analytics.dailyBreakdown[date] = {
+          sales: 0,        // Number of sales
+          tickets: 0,      // Total tickets
+          socks: 0,
+          revenue: 0,
+          profit: 0,
+          bundles: 0
+        };
+      }
+      analytics.dailyBreakdown[date].sales += 1;
+      analytics.dailyBreakdown[date].tickets += totalTicketsInSale;
+      analytics.dailyBreakdown[date].socks += ticket.socksCount || 0;
+      analytics.dailyBreakdown[date].revenue += ticket.subtotal || 0;
+      analytics.dailyBreakdown[date].profit += saleProfit;
+      if (ticket.selectedBundel) {
+        analytics.dailyBreakdown[date].bundles += 1;
+      }
+      
+      // Weekly breakdown
+      const ticketDate = new Date(ticket.date);
+      const weekStart = new Date(ticketDate);
+      weekStart.setDate(ticketDate.getDate() - ticketDate.getDay());
+      const weekKey = weekStart.toISOString().split('T')[0];
+      
+      if (!analytics.weeklyBreakdown[weekKey]) {
+        analytics.weeklyBreakdown[weekKey] = {
+          weekStart: weekKey,
+          sales: 0,
+          tickets: 0,
+          socks: 0,
+          revenue: 0,
+          profit: 0,
+          bundles: 0,
+          averageDailySales: 0
+        };
+      }
+      analytics.weeklyBreakdown[weekKey].sales += 1;
+      analytics.weeklyBreakdown[weekKey].tickets += totalTicketsInSale;
+      analytics.weeklyBreakdown[weekKey].socks += ticket.socksCount || 0;
+      analytics.weeklyBreakdown[weekKey].revenue += ticket.subtotal || 0;
+      analytics.weeklyBreakdown[weekKey].profit += saleProfit;
+      if (ticket.selectedBundel) {
+        analytics.weeklyBreakdown[weekKey].bundles += 1;
+      }
+      
+      // Monthly breakdown
+      const monthKey = `${ticketDate.getFullYear()}-${String(ticketDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!analytics.monthlyBreakdown[monthKey]) {
+        analytics.monthlyBreakdown[monthKey] = {
+          month: monthKey,
+          sales: 0,
+          tickets: 0,
+          socks: 0,
+          revenue: 0,
+          profit: 0,
+          bundles: 0,
+          averageDailySales: 0,
+          averageWeeklySales: 0
+        };
+      }
+      analytics.monthlyBreakdown[monthKey].sales += 1;
+      analytics.monthlyBreakdown[monthKey].tickets += totalTicketsInSale;
+      analytics.monthlyBreakdown[monthKey].socks += ticket.socksCount || 0;
+      analytics.monthlyBreakdown[monthKey].revenue += ticket.subtotal || 0;
+      analytics.monthlyBreakdown[monthKey].profit += saleProfit;
+      if (ticket.selectedBundel) {
+        analytics.monthlyBreakdown[monthKey].bundles += 1;
+      }
+      
+      // Refunds (check refundStatus properly - include cancelled tickets)
+      if (ticket.refundStatus === 'refunded') {
+        analytics.totalRefunds += 1;
+        analytics.refundedAmount += ticket.refundedAmount || 0;
+      }
+      
+      // Used tickets (count individual tickets, not sales) - only for non-cancelled tickets
+      if (!ticket.cancelTicket) {
+        if (ticket.isUsed) {
+          analytics.usedTickets += totalTicketsInSale;
+        } else {
+          analytics.unusedTickets += totalTicketsInSale;
+        }
+      }
+    });
+
+    // Calculate averages and additional metrics
+    if (analytics.totalSales > 0) {
+      analytics.averageSaleValue = analytics.totalRevenue / analytics.totalSales;
+    }
+    if (analytics.totalTickets > 0) {
+      analytics.averageTicketPrice = analytics.totalRevenue / analytics.totalTickets;
+    }
+
+    // Calculate weekly averages
+    Object.keys(analytics.weeklyBreakdown).forEach(weekKey => {
+      const week = analytics.weeklyBreakdown[weekKey];
+      week.averageDailySales = week.sales / 7;
+    });
+
+    // Calculate monthly averages
+    Object.keys(analytics.monthlyBreakdown).forEach(monthKey => {
+      const month = analytics.monthlyBreakdown[monthKey];
+      const daysInMonth = new Date(monthKey.split('-')[0], monthKey.split('-')[1], 0).getDate();
+      month.averageDailySales = month.sales / daysInMonth;
+      month.averageWeeklySales = month.sales / 4.33; // Average weeks per month
+    });
+
+    // Get top selling dates (by number of tickets)
+    const dailyArray = Object.entries(analytics.dailyBreakdown)
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => b.tickets - a.tickets)
+      .slice(0, 10);
+    
+    analytics.topSellingDates = dailyArray;
+
+    // Payment method breakdown
+    analytics.paymentMethodBreakdown = {
+      cash: analytics.cashPayments,
+      card: analytics.cardPayments,
+      total: analytics.cashPayments + analytics.cardPayments
+    };
+
+    // Convert breakdowns to arrays for easier frontend consumption
+    analytics.dailyBreakdownArray = Object.entries(analytics.dailyBreakdown)
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    analytics.weeklyBreakdownArray = Object.entries(analytics.weeklyBreakdown)
+      .map(([weekKey, data]) => ({ weekKey, ...data }))
+      .sort((a, b) => new Date(a.weekKey) - new Date(b.weekKey));
+
+    analytics.monthlyBreakdownArray = Object.entries(analytics.monthlyBreakdown)
+      .map(([monthKey, data]) => ({ monthKey, ...data }))
+      .sort((a, b) => new Date(a.monthKey) - new Date(b.monthKey));
+
+    // Bundle breakdown array
+    analytics.bundleBreakdownArray = Object.entries(analytics.bundleBreakdown)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    res.json({
+      success: true,
+      data: analytics
+    });
+
+  } catch (error) {
+    console.error("Error getting ticket analytics:", error);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching analytics.",
+      error: error.message
+    });
+  }
+};
+

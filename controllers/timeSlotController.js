@@ -61,6 +61,47 @@ exports.bulkCreateSlots = async (req, res) => {
     const end = new Date(eventEndDate);
     const slotDocs = [];
 
+    // Check existing slots for the date range
+    const existingSlots = await TimeSlot.find({
+      date: {
+        $gte: eventStartDate,
+        $lte: eventEndDate
+      }
+    });
+
+    // Group existing slots by date
+    const slotsByDate = {};
+    existingSlots.forEach(slot => {
+      if (!slotsByDate[slot.date]) {
+        slotsByDate[slot.date] = [];
+      }
+      slotsByDate[slot.date].push(slot);
+    });
+
+    // Check if we can add new slots
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const day = d.getDay();
+      const isWeekday = day >= 1 && day <= 5;
+      const isWeekend = day === 0 || day === 6;
+      const match =
+        (dayType === "weekday" && isWeekday) ||
+        (dayType === "weekend" && isWeekend);
+
+      if (match) {
+        const date = new Date(d).toISOString().split("T")[0];
+        const existingSlotsForDate = slotsByDate[date] || [];
+        const maxAllowedSlots = dayType === "weekday" ? 4 : 7;
+        
+        if (existingSlotsForDate.length + slots.length > maxAllowedSlots) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `Cannot create slots. You already have ${existingSlotsForDate.length} slots and trying to add ${slots.length} more. Maximum allowed is ${maxAllowedSlots} slots per day for ${dayType}.` 
+          });
+        }
+      }
+    }
+
+    // If validation passes, create the slots
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const day = d.getDay();
       const isWeekday = day >= 1 && day <= 5;

@@ -1,6 +1,7 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Ticket = require("../models/Ticket");
 const TimeSlot = require("../models/TimeSlot");
+const Setting = require("../models/Setting");
 const { generateAndSendTicketPDF, printTicket } = require("../utils/ticketUtils");
 
 exports.bookWalkInTicket = async (req, res) => {
@@ -43,17 +44,23 @@ exports.bookWalkInTicket = async (req, res) => {
       }
     }
 
-    // Step 2: Calculate pricing
+    // Step 2: Get prices from settings
+    const settings = await Setting.findOne();
+    if (!settings) {
+      return res.status(500).json({ success: false, message: "Settings not found. Please configure pricing." });
+    }
+
+    // Step 3: Calculate pricing using settings
     const ADMIN_FEE = 2.5;
-    const ticketPrice = 10;
+    const ticketPrice = settings.ticketPrice;
     const baseAmount = ticketPrice * tickets;
-    const socksPrice = 3;
+    const socksPrice = settings.socksPrice;
     const totalSocksAmount = socksCount * socksPrice;
     const bundleNetPrice = selectedBundel?.price || 0;
 
     const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + ADMIN_FEE;
 
-    // Step 3: Create ticket object
+    // Step 4: Create ticket object
     const ticket = new Ticket({
       date,
       startTime,
@@ -79,7 +86,7 @@ exports.bookWalkInTicket = async (req, res) => {
       paymentStatus: isCashPayment ? 'paid' : 'pending',
     });
 
-    // Step 4: Cash flow
+    // Step 5: Cash flow
     if (isCashPayment) {
       await ticket.save();
       await generateAndSendTicketPDF(ticket);
@@ -92,7 +99,7 @@ exports.bookWalkInTicket = async (req, res) => {
       });
     }
 
-    // Step 5: Online Payment Flow – Create Stripe session
+    // Step 6: Online Payment Flow – Create Stripe session
     await ticket.save(); // Save before Stripe to get ticket._id
 
     const session = await stripe.checkout.sessions.create({

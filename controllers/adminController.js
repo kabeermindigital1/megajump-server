@@ -10,11 +10,20 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // No token, just simple role return
+    // Return different roles based on username
+    let role;
+    if (username === 'admin') {
+      role = 'adminJump'; // Full admin access
+    } else if (username === 'cashier') {
+      role = 'cashier'; // Cash payment only
+    } else {
+      role = 'adminJump'; // Default fallback
+    }
+
     res.json({
       success: true,
       message: 'Login successful',
-      role: 'adminJump',
+      role: role,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
