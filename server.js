@@ -9,6 +9,7 @@ const settingRoutes = require('./routes/SettingRouter');
 const adminRoutes = require('./routes/AdminRoutes');
 const cancelRequestRoutes = require("./routes/cancelRequest");
 const emailTicketRoutes = require("./routes/emailTicketRoutes");
+
 const paymentRoutes = require('./routes/PaymentRoutes');
 const ticketRefundRoutes = require("./routes/ticketRefundRoutes");
 const massRefundRoutes = require("./routes/massRefundRoutes");
@@ -26,6 +27,24 @@ app.post('/api/payment/webhook', express.raw({ type: 'application/json' }), webh
 app.use(cors());
 app.use(express.json()); // ⬅️ Comes AFTER webhook raw middleware
 
+// 🏥 Health Check Endpoint
+app.get('/api/health', (req, res) => {
+  const health = {
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    database: {
+      status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      readyState: mongoose.connection.readyState
+    },
+    memory: process.memoryUsage(),
+    environment: process.env.NODE_ENV || 'development'
+  };
+  
+  const statusCode = health.database.status === 'connected' ? 200 : 503;
+  res.status(statusCode).json(health);
+});
+
 // 🔗 API Routes
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/timeslots', timeSlotRoutes);
@@ -33,6 +52,7 @@ app.use('/api/settings', settingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use("/api/cancel-request", cancelRequestRoutes);
 app.use("/api/email-ticket", emailTicketRoutes);
+
 app.use('/api/payment', paymentRoutes);
 app.use("/api/refund", ticketRefundRoutes);
 app.use("/api/refund", massRefundRoutes); // (same path, different logic?)

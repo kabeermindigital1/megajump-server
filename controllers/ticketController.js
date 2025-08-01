@@ -1,6 +1,7 @@
 const Ticket = require('../models/Ticket');
 const TimeSlot = require('../models/TimeSlot');
 const { v4: uuidv4 } = require('uuid');
+const mongoose = require('mongoose'); // Added for mongoose connection check
 
 // ✅ Create ticket with slot availability check
 exports.createTicket = async (req, res) => {
@@ -143,38 +144,156 @@ exports.cancelTicket = async (req, res) => {
   }
 };
 
-// ✅ VERIFY TICKET (QR SCAN)
+// ✅ VERIFY TICKET (QR SCAN) - IMPROVED VERSION
 exports.verifyTicket = async (req, res) => {
-  console.log("Request Body:", req.body);
+  console.log("🔍 Verify Ticket Request Body:", req.body);
+  
   try {
+    // Step 1: Validate request body
+    if (!req.body) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Request body is missing',
+        error: 'INVALID_REQUEST_BODY'
+      });
+    }
+
     const { ticketId } = req.body;
 
+    // Step 2: Validate ticketId parameter
     if (!ticketId) {
-      return res.status(400).json({ success: false, message: 'ticketId is required' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'ticketId is required',
+        error: 'MISSING_TICKET_ID'
+      });
     }
 
-    const ticket = await Ticket.findOne({ ticketId: ticketId.trim() });
+    if (typeof ticketId !== 'string' || ticketId.trim().length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'ticketId must be a non-empty string',
+        error: 'INVALID_TICKET_ID_FORMAT'
+      });
+    }
+
+    const cleanTicketId = ticketId.trim();
+
+    // Step 3: Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      console.error("❌ Database not connected. Ready state:", mongoose.connection.readyState);
+      return res.status(503).json({ 
+        success: false, 
+        message: 'Database connection unavailable',
+        error: 'DATABASE_CONNECTION_ERROR'
+      });
+    }
+
+    // Step 4: Find ticket with timeout
+    const ticket = await Promise.race([
+      Ticket.findOne({ ticketId: cleanTicketId }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database query timeout')), 10000)
+      )
+    ]);
 
     if (!ticket) {
-      return res.status(404).json({ success: false, message: 'Ticket not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Ticket not found',
+        error: 'TICKET_NOT_FOUND',
+        ticketId: cleanTicketId
+      });
     }
 
+    // Step 5: Validate ticket status
     if (ticket.cancelTicket) {
-      return res.status(403).json({ success: false, message: 'Ticket is cancelled and cannot be used' });
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Ticket is cancelled and cannot be used',
+        error: 'TICKET_CANCELLED',
+        ticketId: cleanTicketId
+      });
     }
 
     if (ticket.isUsed) {
-      return res.status(409).json({ success: false, message: 'Ticket has already been used' });
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Ticket has already been used',
+        error: 'TICKET_ALREADY_USED',
+        ticketId: cleanTicketId,
+        usedAt: ticket.updatedAt
+      });
     }
 
+    // Step 6: Mark ticket as used
     ticket.isUsed = true;
     await ticket.save();
 
-    console.log("Ticket Data Sent:", ticket); // ✅ See full data in terminal
+    console.log("✅ Ticket Verified Successfully:", {
+      ticketId: cleanTicketId,
+      customerName: `${ticket.name} ${ticket.surname}`,
+      date: ticket.date,
+      time: `${ticket.startTime} - ${ticket.endTime}`
+    });
 
-    res.json({ success: true, message: 'Ticket verified and marked as used', ticket });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    // Step 7: Return success response with complete ticket details
+    res.json({ 
+      success: true, 
+      message: 'Ticket verified and marked as used',
+      ticket: {
+        ticketId: ticket.ticketId,
+        name: ticket.name,
+        surname: ticket.surname,
+        email: ticket.email,
+        phone: ticket.phone,
+        date: ticket.date,
+        startTime: ticket.startTime,
+        endTime: ticket.endTime,
+        tickets: ticket.tickets,
+        
+        subtotal: ticket.subtotal,
+        administrationFee: ticket.administrationFee,
+         
+        cancellationEnabled: ticket.cancellationEnabled,
+      
+        addonData: ticket.addonData,
+        bundelSelected: ticket.bundelSelected,
+        selectedBundel: ticket.selectedBundel,
+        isCashPayment: ticket.isCashPayment,
+        paymentStatus: ticket.paymentStatus,
+        paymentMethod: ticket.paymentMethod,
+        isUsed: ticket.isUsed,
+        verifiedAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Verify Ticket Error:", error);
+    
+    // Handle specific error types
+    if (error.message === 'Database query timeout') {
+      return res.status(504).json({ 
+        success: false, 
+        message: 'Request timeout - please try again',
+        error: 'REQUEST_TIMEOUT'
+      });
+    }
+
+    if (error.name === 'MongoError' || error.name === 'MongoServerError') {
+      return res.status(503).json({ 
+        success: false, 
+        message: 'Database service temporarily unavailable',
+        error: 'DATABASE_ERROR'
+      });
+    }
+
+    // Generic error response
+    res.status(500).json({ 
+      success: false, 
+      message: 'An unexpected error occurred while verifying the ticket',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
   }
 };
 
@@ -411,6 +530,206 @@ exports.getTicketAnalytics = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "An error occurred while fetching analytics.",
+      error: error.message
+    });
+  }
+};
+
+// ✅ SEND TICKET VIA EMAIL - Send ticket PDF to purchaser
+exports.sendTicketEmail = async (req, res) => {
+  try {
+    const { email, ticketId, pdfBase64 } = req.body;
+
+    // Step 1: Validate required fields
+    if (!email || !ticketId || !pdfBase64) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: email, ticketId, or pdfBase64",
+        error: 'MISSING_REQUIRED_FIELDS'
+      });
+    }
+
+    // Step 2: Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email format",
+        error: 'INVALID_EMAIL_FORMAT'
+      });
+    }
+
+    // Step 3: Find the ticket in database
+    const ticket = await Ticket.findOne({ ticketId: ticketId.trim() });
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: "Ticket not found",
+        error: 'TICKET_NOT_FOUND',
+        ticketId: ticketId
+      });
+    }
+
+    // Step 4: Verify email matches ticket purchaser (optional security check)
+    if (ticket.email && ticket.email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        message: "Email does not match ticket purchaser",
+        error: 'EMAIL_MISMATCH'
+      });
+    }
+
+    // Step 5: Check if ticket is cancelled
+    if (ticket.cancelTicket) {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot send email for cancelled ticket",
+        error: 'TICKET_CANCELLED'
+      });
+    }
+
+    // Step 6: Convert base64 to buffer and save temporarily
+    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+    const tempFileName = `ticket_${ticketId}_${Date.now()}.pdf`;
+    const tempFilePath = `uploads/${tempFileName}`;
+    
+    const fs = require('fs');
+    fs.writeFileSync(tempFilePath, pdfBuffer);
+
+    // Step 7: Send email using nodemailer
+    const nodemailer = require('nodemailer');
+    
+    const transporter = nodemailer.createTransporter({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: `"Mega Jump" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "🎫 Your Mega Jump Ticket - Ready for Download!",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center; color: white;">
+            <h1 style="margin: 0;">🎫 Mega Jump Ticket</h1>
+          </div>
+          
+          <div style="padding: 30px; background: #f9f9f9;">
+            <h2 style="color: #333;">Hello ${ticket.name || 'there'}!</h2>
+            
+            <p style="color: #666; line-height: 1.6;">
+              Your Mega Jump ticket is ready! Please find your ticket attached to this email.
+            </p>
+            
+            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
+              <h3 style="margin-top: 0; color: #333;">Ticket Details:</h3>
+              <p><strong>Ticket ID:</strong> ${ticket.ticketId}</p>
+              <p><strong>Date:</strong> ${ticket.date}</p>
+              <p><strong>Time:</strong> ${ticket.startTime} - ${ticket.endTime}</p>
+              <p><strong>Number of Tickets:</strong> ${ticket.tickets}</p>
+              <p><strong>Total Amount:</strong> €${ticket.subtotal}</p>
+            </div>
+            
+            <p style="color: #666; line-height: 1.6;">
+              <strong>Important:</strong> Please keep this ticket safe and present it at the entrance. 
+              You can either print it or show it on your mobile device.
+            </p>
+            
+            <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0; color: #0056b3;">
+                <strong>📍 Location:</strong> Mega Jump Trampoline Park<br>
+                <strong>📞 Contact:</strong> For any questions, please contact us
+              </p>
+            </div>
+            
+            <p style="color: #666; line-height: 1.6;">
+              We hope you have an amazing time at Mega Jump! 🎉
+            </p>
+            
+            <p style="color: #999; font-size: 14px; margin-top: 30px;">
+              Best regards,<br>
+              The Mega Jump Team
+            </p>
+          </div>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `MegaJump_Ticket_${ticketId}.pdf`,
+          path: tempFilePath,
+        },
+      ],
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    // Step 8: Log the email send
+    const EmailLog = require('../models/EmailLog');
+    await EmailLog.create({
+      email: email,
+      name: ticket.name || '',
+      ticketId: ticketId,
+      status: "SENT",
+    });
+
+    // Step 9: Clean up temporary file
+    fs.unlinkSync(tempFilePath);
+
+    console.log("✅ Ticket Email Sent Successfully:", {
+      ticketId: ticketId,
+      email: email,
+      customerName: `${ticket.name} ${ticket.surname}`
+    });
+
+    res.json({
+      success: true,
+      message: "Ticket email sent successfully",
+      data: {
+        ticketId: ticketId,
+        email: email,
+        sentAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Send Ticket Email Error:", error);
+    
+    // Clean up temp file if it exists
+    try {
+      const fs = require('fs');
+      if (req.body.ticketId && req.body.pdfBase64) {
+        const tempFileName = `ticket_${req.body.ticketId}_${Date.now()}.pdf`;
+        const tempFilePath = `uploads/${tempFileName}`;
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+        }
+      }
+    } catch (cleanupError) {
+      console.error("Cleanup error:", cleanupError);
+    }
+
+    // Log the failure
+    try {
+      const EmailLog = require('../models/EmailLog');
+      await EmailLog.create({
+        email: req.body.email || '',
+        name: req.body.name || '',
+        ticketId: req.body.ticketId || '',
+        status: "FAILED",
+        error: error.message,
+      });
+    } catch (logError) {
+      console.error("Failed to log email error:", logError);
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to send ticket email",
       error: error.message
     });
   }
