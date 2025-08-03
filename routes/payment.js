@@ -44,10 +44,21 @@ router.get('/verify-payment', async (req, res) => {
         ticket.paymentStatus = 'paid';
         ticket.metadata = ticket.metadata || {};
         ticket.metadata.stripePaymentIntentId = paymentIntentId;
+        ticket.metadata.stripeSessionId = sessionId; // Store session ID for sync service
       
         await ticket.save();
       
         console.log('✅ Ticket updated successfully in DB');
+      } else if (ticketId) {
+        // Store session ID even for unpaid tickets for sync service
+        const ticket = await Ticket.findById(ticketId);
+        
+        if (ticket) {
+          ticket.metadata = ticket.metadata || {};
+          ticket.metadata.stripeSessionId = sessionId;
+          await ticket.save();
+          console.log('📝 Session ID stored for ticket:', ticketId);
+        }
       }
 
     return res.json({

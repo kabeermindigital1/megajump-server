@@ -538,6 +538,15 @@ exports.getTicketAnalytics = async (req, res) => {
 // ✅ SEND TICKET VIA EMAIL - Send ticket PDF to purchaser
 exports.sendTicketEmail = async (req, res) => {
   try {
+    // Check if request body exists
+    if (!req.body) {
+      return res.status(400).json({
+        success: false,
+        message: "Request body is missing or invalid",
+        error: 'MISSING_REQUEST_BODY'
+      });
+    }
+    
     const { email, ticketId, pdfBase64 } = req.body;
 
     // Step 1: Validate required fields
@@ -570,16 +579,7 @@ exports.sendTicketEmail = async (req, res) => {
       });
     }
 
-    // Step 4: Verify email matches ticket purchaser (optional security check)
-    if (ticket.email && ticket.email.toLowerCase() !== email.toLowerCase()) {
-      return res.status(403).json({
-        success: false,
-        message: "Email does not match ticket purchaser",
-        error: 'EMAIL_MISMATCH'
-      });
-    }
-
-    // Step 5: Check if ticket is cancelled
+    // Step 4: Check if ticket is cancelled
     if (ticket.cancelTicket) {
       return res.status(403).json({
         success: false,
@@ -588,7 +588,7 @@ exports.sendTicketEmail = async (req, res) => {
       });
     }
 
-    // Step 6: Convert base64 to buffer and save temporarily
+    // Step 5: Convert base64 to buffer and save temporarily
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
     const tempFileName = `ticket_${ticketId}_${Date.now()}.pdf`;
     const tempFilePath = `uploads/${tempFileName}`;
@@ -596,10 +596,10 @@ exports.sendTicketEmail = async (req, res) => {
     const fs = require('fs');
     fs.writeFileSync(tempFilePath, pdfBuffer);
 
-    // Step 7: Send email using nodemailer
+    // Step 6: Send email using nodemailer
     const nodemailer = require('nodemailer');
     
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 587,
       secure: false,
@@ -668,7 +668,7 @@ exports.sendTicketEmail = async (req, res) => {
 
     await transporter.sendMail(mailOptions);
 
-    // Step 8: Log the email send
+    // Step 7: Log the email send
     const EmailLog = require('../models/EmailLog');
     await EmailLog.create({
       email: email,
@@ -677,7 +677,7 @@ exports.sendTicketEmail = async (req, res) => {
       status: "SENT",
     });
 
-    // Step 9: Clean up temporary file
+    // Step 8: Clean up temporary file
     fs.unlinkSync(tempFilePath);
 
     console.log("✅ Ticket Email Sent Successfully:", {
@@ -702,7 +702,7 @@ exports.sendTicketEmail = async (req, res) => {
     // Clean up temp file if it exists
     try {
       const fs = require('fs');
-      if (req.body.ticketId && req.body.pdfBase64) {
+      if (req.body && req.body.ticketId && req.body.pdfBase64) {
         const tempFileName = `ticket_${req.body.ticketId}_${Date.now()}.pdf`;
         const tempFilePath = `uploads/${tempFileName}`;
         if (fs.existsSync(tempFilePath)) {
@@ -717,9 +717,9 @@ exports.sendTicketEmail = async (req, res) => {
     try {
       const EmailLog = require('../models/EmailLog');
       await EmailLog.create({
-        email: req.body.email || '',
-        name: req.body.name || '',
-        ticketId: req.body.ticketId || '',
+        email: req.body?.email || '',
+        name: req.body?.name || '',
+        ticketId: req.body?.ticketId || '',
         status: "FAILED",
         error: error.message,
       });
