@@ -20,6 +20,7 @@ const webhookController = require('./controllers/webhookController');
 const paymentRoute = require('./routes/payment');
 const paymentSyncRoutes = require('./routes/paymentSyncRoutes');
 const paymentSyncService = require('./services/paymentSyncService');
+const emailRetryService = require('./services/emailRetryService');
 const app = express();
 
 // ✅ Stripe webhook route — must come BEFORE express.json middleware
@@ -80,12 +81,15 @@ mongoose.connect(MONGO_URI, {
   useUnifiedTopology: true,
 }).then(() => {
   console.log('✅ MongoDB connected');
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    
-    // Start the payment sync service automatically
-    paymentSyncService.start();
-  });
+      app.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      
+      // Start the payment sync service automatically
+      paymentSyncService.start();
+      
+      // Start the email retry service automatically
+      emailRetryService.start();
+    });
 }).catch((err) => {
   console.error('❌ MongoDB connection error:', err);
   process.exit(1);

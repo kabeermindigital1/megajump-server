@@ -12,16 +12,17 @@ exports.bookWalkInTicket = async (req, res) => {
       endTime,
       tickets,
       socksCount = 0,
-      selectedBundel = null,
+      selectedBundel,
       isCashPayment = false,
       skipSlotCheck = false,
       name,
       surname,
       email,
-      phone
+      phone,
+      
     } = req.body;
 
-    if (!date || !startTime || !endTime || !tickets || !name || !surname || !email) {
+    if (!date || !startTime || !endTime || ( !tickets && !selectedBundel) || !name || !surname || !email) {
       return res.status(400).json({ success: false, message: "Missing required booking details." });
     }
 

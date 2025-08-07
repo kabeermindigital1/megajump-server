@@ -226,7 +226,106 @@ exports.verifyTicket = async (req, res) => {
       });
     }
 
-    // Step 6: Mark ticket as used
+    // Step 6: Validate ticket date and time
+    const currentDate = new Date();
+    
+    // Parse ticket date string (format: YYYY-MM-DD)
+    const ticketDateParts = ticket.date.split('-');
+    const ticketYear = parseInt(ticketDateParts[0]);
+    const ticketMonth = parseInt(ticketDateParts[1]) - 1; // Month is 0-indexed
+    const ticketDay = parseInt(ticketDateParts[2]);
+    
+    const ticketDate = new Date(ticketYear, ticketMonth, ticketDay);
+    
+    // Reset time to start of day for date comparison
+    const currentDateOnly = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+    const ticketDateOnly = new Date(ticketDate.getFullYear(), ticketDate.getMonth(), ticketDate.getDate());
+    
+    // Debug logging
+    console.log("🔍 Date Validation Debug:", {
+      currentDate: currentDate.toISOString(),
+      currentDateOnly: currentDateOnly.toISOString(),
+      ticketDate: ticket.date,
+      ticketDateOnly: ticketDateOnly.toISOString(),
+      currentDateOnlyTime: currentDateOnly.getTime(),
+      ticketDateOnlyTime: ticketDateOnly.getTime(),
+      isBeforeTicketDate: currentDateOnly < ticketDateOnly,
+      isAfterTicketDate: currentDateOnly > ticketDateOnly
+    });
+    
+    // Check if scanning before the ticket date
+    if (currentDateOnly < ticketDateOnly) {
+      console.log("❌ Ticket scanned before valid date");
+      return res.status(403).json({ 
+        success: false, 
+        message: 'This ticket is not valid yet. Please scan on the correct date.',
+        error: 'TICKET_DATE_NOT_REACHED',
+        ticketId: cleanTicketId,
+        ticketDate: ticket.date,
+        currentDate: currentDateOnly.toISOString().split('T')[0]
+      });
+    }
+    
+    // Check if scanning after the ticket date
+    if (currentDateOnly > ticketDateOnly) {
+      console.log("❌ Ticket scanned after valid date");
+      return res.status(403).json({ 
+        success: false, 
+        message: 'This ticket has expired. It was only valid for the specified date.',
+        error: 'TICKET_DATE_EXPIRED',
+        ticketId: cleanTicketId,
+        ticketDate: ticket.date,
+        currentDate: currentDateOnly.toISOString().split('T')[0]
+      });
+    }
+    
+    // Check if scanning more than 30 minutes after start time (only if it's the correct date)
+    if (currentDateOnly.getTime() === ticketDateOnly.getTime()) {
+      const startTimeParts = ticket.startTime.split(':');
+      const startHour = parseInt(startTimeParts[0]);
+      const startMinute = parseInt(startTimeParts[1]);
+      
+      // Create ticket start time by combining the ticket date with the start time
+      // This ensures we're working in the local timezone
+      const ticketStartTime = new Date(ticketYear, ticketMonth, ticketDay, startHour, startMinute, 0, 0);
+      
+      // Get current time
+      const currentLocalTime = new Date();
+      
+      // Calculate 30 minutes after start time
+      const thirtyMinutesAfterStart = new Date(ticketStartTime.getTime() + (30 * 60 * 1000));
+      
+      console.log("🔍 Time Validation Debug:", {
+        startTime: ticket.startTime,
+        startHour: startHour,
+        startMinute: startMinute,
+        ticketStartTime: ticketStartTime.toISOString(),
+        ticketStartTimeLocal: ticketStartTime.toLocaleString(),
+        thirtyMinutesAfterStart: thirtyMinutesAfterStart.toISOString(),
+        thirtyMinutesAfterStartLocal: thirtyMinutesAfterStart.toLocaleString(),
+        currentDate: currentDate.toISOString(),
+        currentLocalTime: currentLocalTime.toLocaleString(),
+        timeDifference: currentLocalTime.getTime() - ticketStartTime.getTime(),
+        timeDifferenceMinutes: Math.floor((currentLocalTime.getTime() - ticketStartTime.getTime()) / (1000 * 60)),
+        isLate: currentLocalTime > thirtyMinutesAfterStart
+      });
+      
+      if (currentLocalTime > thirtyMinutesAfterStart) {
+        console.log("❌ Ticket scanned too late");
+        return res.status(403).json({ 
+          success: false, 
+          message: 'You are late! Your ticket has expired. Please arrive on time for your booking.',
+          error: 'TICKET_TIME_EXPIRED',
+          ticketId: cleanTicketId,
+          ticketDate: ticket.date,
+          startTime: ticket.startTime,
+          currentTime: currentLocalTime.toLocaleTimeString(),
+          expiredAt: thirtyMinutesAfterStart.toLocaleTimeString()
+        });
+      }
+    }
+
+    // Step 7: Mark ticket as used
     ticket.isUsed = true;
     await ticket.save();
 
@@ -237,7 +336,7 @@ exports.verifyTicket = async (req, res) => {
       time: `${ticket.startTime} - ${ticket.endTime}`
     });
 
-    // Step 7: Return success response with complete ticket details
+    // Step 8: Return success response with complete ticket details
     res.json({ 
       success: true, 
       message: 'Ticket verified and marked as used',
@@ -589,81 +688,135 @@ exports.sendTicketEmail = async (req, res) => {
     }
 
     // Step 5: Convert base64 to buffer and save temporarily
-    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-    const tempFileName = `ticket_${ticketId}_${Date.now()}.pdf`;
-    const tempFilePath = `uploads/${tempFileName}`;
-    
-    const fs = require('fs');
-    fs.writeFileSync(tempFilePath, pdfBuffer);
+    // COMMENTED OUT FOR TESTING - PDF ATTACHMENT DISABLED
+    // const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+    // const tempFileName = `ticket_${ticketId}_${Date.now()}.pdf`;
+    // const tempFilePath = `uploads/${tempFileName}`;
+    // 
+    // const fs = require('fs');
+    // fs.writeFileSync(tempFilePath, pdfBuffer);
 
-    // Step 6: Send email using nodemailer
+    // Step 6: Send email using nodemailer with iPhone-compatible settings
     const nodemailer = require('nodemailer');
     
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 587,
-      secure: false,
+      secure: false, // Use TLS
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+      tls: {
+        ciphers: 'SSLv3',
+        rejectUnauthorized: false
+      },
+      // iPhone-compatible settings
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      rateLimit: 14, // Limit to 14 emails per second
     });
 
-    const mailOptions = {
-      from: `"Mega Jump" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "🎫 Your Mega Jump Ticket - Ready for Download!",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center; color: white;">
-            <h1 style="margin: 0;">🎫 Mega Jump Ticket</h1>
+    // SIMPLIFIED EMAIL FOR TESTING - ONLY TICKET ID
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Mega Jump Ticket</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <h1 style="color: #2196F3; text-align: center; margin-bottom: 30px;">🎫 Mega Jump Ticket</h1>
+          
+          <h2 style="color: #333; margin-bottom: 20px;">Hello ${ticket.name || 'there'}!</h2>
+          
+          <p style="color: #666; line-height: 1.6; font-size: 16px; margin-bottom: 20px;">
+            Your Mega Jump ticket is ready! This is a TEST EMAIL - PDF attachment disabled for testing.
+          </p>
+          
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
+            <h3 style="margin-top: 0; color: #333;">Ticket Details:</h3>
+            <p style="margin: 8px 0; font-size: 16px;"><strong>Ticket ID:</strong> ${ticket.ticketId}</p>
+            <p style="margin: 8px 0; font-size: 16px;"><strong>Date:</strong> ${ticket.date}</p>
+            <p style="margin: 8px 0; font-size: 16px;"><strong>Time:</strong> ${ticket.startTime} - ${ticket.endTime}</p>
+            <p style="margin: 8px 0; font-size: 16px;"><strong>Number of Tickets:</strong> ${ticket.tickets}</p>
+            <p style="margin: 8px 0; font-size: 16px;"><strong>Total Amount:</strong> €${ticket.subtotal}</p>
           </div>
           
-          <div style="padding: 30px; background: #f9f9f9;">
-            <h2 style="color: #333;">Hello ${ticket.name || 'there'}!</h2>
-            
-            <p style="color: #666; line-height: 1.6;">
-              Your Mega Jump ticket is ready! Please find your ticket attached to this email.
+          <p style="color: #666; line-height: 1.6; font-size: 16px; margin-bottom: 20px;">
+            <strong>TEST MODE:</strong> This email is for testing iPhone compatibility. PDF attachment is disabled.
+          </p>
+          
+          <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; color: #0056b3; font-size: 16px;">
+              <strong>📍 Location:</strong> Mega Jump Trampoline Park<br>
+              <strong>📞 Contact:</strong> For any questions, please contact us
             </p>
-            
-            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
-              <h3 style="margin-top: 0; color: #333;">Ticket Details:</h3>
-              <p><strong>Ticket ID:</strong> ${ticket.ticketId}</p>
-              <p><strong>Date:</strong> ${ticket.date}</p>
-              <p><strong>Time:</strong> ${ticket.startTime} - ${ticket.endTime}</p>
-              <p><strong>Number of Tickets:</strong> ${ticket.tickets}</p>
-              <p><strong>Total Amount:</strong> €${ticket.subtotal}</p>
-            </div>
-            
-            <p style="color: #666; line-height: 1.6;">
-              <strong>Important:</strong> Please keep this ticket safe and present it at the entrance. 
-              You can either print it or show it on your mobile device.
-            </p>
-            
-            <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0; color: #0056b3;">
-                <strong>📍 Location:</strong> Mega Jump Trampoline Park<br>
-                <strong>📞 Contact:</strong> For any questions, please contact us
-              </p>
-            </div>
-            
-            <p style="color: #666; line-height: 1.6;">
-              We hope you have an amazing time at Mega Jump! 🎉
-            </p>
-            
-            <p style="color: #999; font-size: 14px; margin-top: 30px;">
+          </div>
+          
+          <p style="color: #666; line-height: 1.6; font-size: 16px; margin-bottom: 20px;">
+            We hope you have an amazing time at Mega Jump! 🎉
+          </p>
+          
+          <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px;">
+            <p style="color: #999; font-size: 14px; margin: 0;">
               Best regards,<br>
               The Mega Jump Team
             </p>
           </div>
         </div>
-      `,
-      attachments: [
-        {
-          filename: `MegaJump_Ticket_${ticketId}.pdf`,
-          path: tempFilePath,
-        },
-      ],
+      </body>
+      </html>
+    `;
+
+    const textContent = `
+Mega Jump Ticket - TEST MODE
+
+Hello ${ticket.name || 'there'}!
+
+Your Mega Jump ticket is ready! This is a TEST EMAIL - PDF attachment disabled for testing.
+
+Ticket Details:
+- Ticket ID: ${ticket.ticketId}
+- Date: ${ticket.date}
+- Time: ${ticket.startTime} - ${ticket.endTime}
+- Number of Tickets: ${ticket.tickets}
+- Total Amount: €${ticket.subtotal}
+
+TEST MODE: This email is for testing iPhone compatibility. PDF attachment is disabled.
+
+Location: Mega Jump Trampoline Park
+Contact: For any questions, please contact us
+
+We hope you have an amazing time at Mega Jump!
+
+Best regards,
+The Mega Jump Team
+    `;
+
+    const mailOptions = {
+      from: `"Mega Jump" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "🎫 Your Mega Jump Ticket - Ready for Download!",
+      text: textContent,
+      html: htmlContent,
+      // COMMENTED OUT FOR TESTING - NO PDF ATTACHMENT
+      // attachments: [
+      //   {
+      //     filename: `MegaJump_Ticket_${ticketId}.pdf`,
+      //     path: tempFilePath,
+      //     contentType: 'application/pdf',
+      //   },
+      // ],
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'high',
+        'X-Mailer': 'MegaJump-Ticket-System'
+      }
     };
 
     await transporter.sendMail(mailOptions);
@@ -675,10 +828,13 @@ exports.sendTicketEmail = async (req, res) => {
       name: ticket.name || '',
       ticketId: ticketId,
       status: "SENT",
+      retryCount: 0,
+      isRetry: false,
     });
 
     // Step 8: Clean up temporary file
-    fs.unlinkSync(tempFilePath);
+    // COMMENTED OUT FOR TESTING - NO FILE TO CLEAN
+    // fs.unlinkSync(tempFilePath);
 
     console.log("✅ Ticket Email Sent Successfully:", {
       ticketId: ticketId,
@@ -722,6 +878,8 @@ exports.sendTicketEmail = async (req, res) => {
         ticketId: req.body?.ticketId || '',
         status: "FAILED",
         error: error.message,
+        retryCount: 0,
+        isRetry: false,
       });
     } catch (logError) {
       console.error("Failed to log email error:", logError);
@@ -730,6 +888,248 @@ exports.sendTicketEmail = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to send ticket email",
+      error: error.message
+    });
+  }
+};
+
+// ✅ TEST EMAIL ENDPOINT - For debugging iPhone email issues
+exports.testEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email address is required",
+        error: 'MISSING_EMAIL'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email format",
+        error: 'INVALID_EMAIL_FORMAT'
+      });
+    }
+
+    const nodemailer = require('nodemailer');
+    
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+      tls: {
+        ciphers: 'SSLv3',
+        rejectUnauthorized: false
+      },
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      rateLimit: 14,
+    });
+
+    // Simple test email
+    const mailOptions = {
+      from: `"Mega Jump Test" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "🧪 Test Email - Mega Jump System",
+      text: `
+Test Email from Mega Jump System
+
+This is a test email to verify email delivery on your device.
+
+Sent at: ${new Date().toLocaleString()}
+Server: ${process.env.NODE_ENV || 'development'}
+
+If you receive this email, the system is working correctly.
+
+Best regards,
+Mega Jump Team
+      `,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Test Email</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <h1 style="color: #2196F3; text-align: center; margin-bottom: 30px;">🧪 Test Email</h1>
+            
+            <h2 style="color: #333;">Mega Jump System Test</h2>
+            
+            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+              This is a test email to verify email delivery on your device.
+            </p>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #333;">Test Details:</h3>
+              <p><strong>Sent at:</strong> ${new Date().toLocaleString()}</p>
+              <p><strong>Server:</strong> ${process.env.NODE_ENV || 'development'}</p>
+              <p><strong>Email:</strong> ${email}</p>
+            </div>
+            
+            <p style="color: #666; line-height: 1.6; font-size: 16px;">
+              If you receive this email, the system is working correctly.
+            </p>
+            
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+              <p style="color: #999; font-size: 14px; margin: 0;">
+                Best regards,<br>
+                Mega Jump Team
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'high',
+        'X-Mailer': 'MegaJump-Test-System'
+      }
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    console.log("✅ Test Email Sent Successfully:", {
+      email: email,
+      sentAt: new Date()
+    });
+
+    res.json({
+      success: true,
+      message: "Test email sent successfully",
+      data: {
+        email: email,
+        sentAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Test Email Error:", error);
+    
+    res.status(500).json({
+      success: false,
+      message: "Failed to send test email",
+      error: error.message
+    });
+  }
+};
+
+// ✅ GET EMAIL STATISTICS - For admin monitoring
+exports.getEmailStats = async (req, res) => {
+  try {
+    const EmailLog = require('../models/EmailLog');
+    const emailRetryService = require('../services/emailRetryService');
+    
+    // Get stats from the retry service
+    const stats = await emailRetryService.getEmailStats();
+    
+    // Get recent email logs
+    const recentLogs = await EmailLog.find()
+      .sort({ sentAt: -1 })
+      .limit(20);
+    
+    // Get failed emails that need attention
+    const failedEmails = await EmailLog.find({ 
+      status: 'FAILED',
+      sentAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
+    }).sort({ sentAt: -1 });
+    
+    res.json({
+      success: true,
+      data: {
+        stats,
+        recentLogs,
+        failedEmails,
+        serviceStatus: {
+          isRunning: emailRetryService.isRunning,
+          lastCheck: new Date()
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Get Email Stats Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get email statistics',
+      error: error.message
+    });
+  }
+};
+
+// ✅ MANUAL RETRY EMAIL - For admin to manually retry failed emails
+exports.retryFailedEmail = async (req, res) => {
+  try {
+    const { ticketId } = req.body;
+    
+    if (!ticketId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ticket ID is required',
+        error: 'MISSING_TICKET_ID'
+      });
+    }
+    
+    const ticket = await Ticket.findOne({ ticketId: ticketId.trim() });
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found',
+        error: 'TICKET_NOT_FOUND'
+      });
+    }
+    
+    const emailRetryService = require('../services/emailRetryService');
+    const emailSent = await emailRetryService.sendRetryEmail(ticket);
+    
+    if (emailSent) {
+      // Log successful retry
+      const EmailLog = require('../models/EmailLog');
+      await EmailLog.create({
+        email: ticket.email,
+        name: ticket.name || '',
+        ticketId: ticket.ticketId,
+        status: 'SENT',
+        retryCount: 1,
+        isRetry: true,
+      });
+      
+      res.json({
+        success: true,
+        message: 'Retry email sent successfully',
+        data: {
+          ticketId: ticket.ticketId,
+          email: ticket.email,
+          sentAt: new Date()
+        }
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send retry email',
+        error: 'EMAIL_SEND_FAILED'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Retry Email Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retry email',
       error: error.message
     });
   }
