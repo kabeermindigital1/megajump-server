@@ -6,7 +6,6 @@ const {
   cancelTicket,
   verifyTicket,
   getTicketAnalytics,
-  testEmail,
   getEmailStats,
   retryFailedEmail,
 } = require('../controllers/ticketController');
@@ -19,8 +18,7 @@ router.put('/:id/cancel', cancelTicket);  // PUT /api/tickets/:id/cancel
 router.delete('/delete-all-with-auth', deleteAllTicketsWithAuth);
 // ✅ Fixed verify route — now correctly maps to /api/tickets/verify
 router.post('/verify', verifyTicket);
-// ✅ Test email route for debugging iPhone email issues
-router.post('/test-email', testEmail);
+
 // ✅ Email statistics route for admin monitoring
 router.get('/email-stats', getEmailStats);
 // ✅ Manual retry failed email route

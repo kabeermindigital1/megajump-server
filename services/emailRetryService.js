@@ -113,10 +113,10 @@ class EmailRetryService {
         }
       }
 
-      console.log(`📧 Attempting to send email for ticket ${ticket.ticketId} to ${ticket.email}`);
+             console.log(`📧 Attempting to send retry email for ticket ${ticket.ticketId} to ${ticket.email}`);
 
-      // Generate a simple email without PDF for retry
-      const emailSent = await this.sendRetryEmail(ticket);
+       // Send retry email with QR code (since original PDF is not available)
+       const emailSent = await this.sendRetryEmail(ticket);
 
       if (emailSent) {
         // Log successful retry
@@ -130,20 +130,20 @@ class EmailRetryService {
 
         console.log(`✅ Successfully sent retry email for ticket ${ticket.ticketId}`);
       } else {
-        // Log failed retry
-        await EmailLog.findOneAndUpdate(
-          { ticketId: ticket.ticketId, status: 'FAILED' },
-          {
-            email: ticket.email,
-            name: ticket.name || '',
-            ticketId: ticket.ticketId,
-            status: 'FAILED',
-            error: 'Retry failed - no PDF available',
-            retryCount: (failedEmailLog?.retryCount || 0) + 1,
-            sentAt: new Date()
-          },
-          { upsert: true, new: true }
-        );
+                 // Log failed retry
+         await EmailLog.findOneAndUpdate(
+           { ticketId: ticket.ticketId, status: 'FAILED' },
+           {
+             email: ticket.email,
+             name: ticket.name || '',
+             ticketId: ticket.ticketId,
+             status: 'FAILED',
+             error: 'Retry failed - QR code email could not be sent',
+             retryCount: (failedEmailLog?.retryCount || 0) + 1,
+             sentAt: new Date()
+           },
+           { upsert: true, new: true }
+         );
 
         console.log(`❌ Failed to send retry email for ticket ${ticket.ticketId}`);
       }

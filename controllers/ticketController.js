@@ -688,13 +688,12 @@ exports.sendTicketEmail = async (req, res) => {
     }
 
     // Step 5: Convert base64 to buffer and save temporarily
-    // COMMENTED OUT FOR TESTING - PDF ATTACHMENT DISABLED
-    // const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-    // const tempFileName = `ticket_${ticketId}_${Date.now()}.pdf`;
-    // const tempFilePath = `uploads/${tempFileName}`;
-    // 
-    // const fs = require('fs');
-    // fs.writeFileSync(tempFilePath, pdfBuffer);
+    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+    const tempFileName = `ticket_${ticketId}_${Date.now()}.pdf`;
+    const tempFilePath = `uploads/${tempFileName}`;
+    
+    const fs = require('fs');
+    fs.writeFileSync(tempFilePath, pdfBuffer);
 
     // Step 6: Send email using nodemailer with iPhone-compatible settings
     const nodemailer = require('nodemailer');
@@ -733,9 +732,9 @@ exports.sendTicketEmail = async (req, res) => {
           
           <h2 style="color: #333; margin-bottom: 20px;">Hello ${ticket.name || 'there'}!</h2>
           
-          <p style="color: #666; line-height: 1.6; font-size: 16px; margin-bottom: 20px;">
-            Your Mega Jump ticket is ready! This is a TEST EMAIL - PDF attachment disabled for testing.
-          </p>
+                      <p style="color: #666; line-height: 1.6; font-size: 16px; margin-bottom: 20px;">
+              Your Mega Jump ticket is ready! Please find your ticket attached to this email.
+            </p>
           
           <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
             <h3 style="margin-top: 0; color: #333;">Ticket Details:</h3>
@@ -746,9 +745,10 @@ exports.sendTicketEmail = async (req, res) => {
             <p style="margin: 8px 0; font-size: 16px;"><strong>Total Amount:</strong> €${ticket.subtotal}</p>
           </div>
           
-          <p style="color: #666; line-height: 1.6; font-size: 16px; margin-bottom: 20px;">
-            <strong>TEST MODE:</strong> This email is for testing iPhone compatibility. PDF attachment is disabled.
-          </p>
+                      <p style="color: #666; line-height: 1.6; font-size: 16px; margin-bottom: 20px;">
+              <strong>Important:</strong> Please keep this ticket safe and present it at the entrance. 
+              You can either print it or show it on your mobile device.
+            </p>
           
           <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 0; color: #0056b3; font-size: 16px;">
@@ -773,11 +773,11 @@ exports.sendTicketEmail = async (req, res) => {
     `;
 
     const textContent = `
-Mega Jump Ticket - TEST MODE
+Mega Jump Ticket
 
 Hello ${ticket.name || 'there'}!
 
-Your Mega Jump ticket is ready! This is a TEST EMAIL - PDF attachment disabled for testing.
+Your Mega Jump ticket is ready! Please find your ticket attached to this email.
 
 Ticket Details:
 - Ticket ID: ${ticket.ticketId}
@@ -786,7 +786,8 @@ Ticket Details:
 - Number of Tickets: ${ticket.tickets}
 - Total Amount: €${ticket.subtotal}
 
-TEST MODE: This email is for testing iPhone compatibility. PDF attachment is disabled.
+Important: Please keep this ticket safe and present it at the entrance. 
+You can either print it or show it on your mobile device.
 
 Location: Mega Jump Trampoline Park
 Contact: For any questions, please contact us
@@ -804,13 +805,13 @@ The Mega Jump Team
       text: textContent,
       html: htmlContent,
       // COMMENTED OUT FOR TESTING - NO PDF ATTACHMENT
-      // attachments: [
-      //   {
-      //     filename: `MegaJump_Ticket_${ticketId}.pdf`,
-      //     path: tempFilePath,
-      //     contentType: 'application/pdf',
-      //   },
-      // ],
+      attachments: [
+        {
+          filename: `MegaJump_Ticket_${ticketId}.pdf`,
+          path: tempFilePath,
+          contentType: 'application/pdf',
+        },
+      ],
       headers: {
         'X-Priority': '1',
         'X-MSMail-Priority': 'High',
@@ -833,8 +834,7 @@ The Mega Jump Team
     });
 
     // Step 8: Clean up temporary file
-    // COMMENTED OUT FOR TESTING - NO FILE TO CLEAN
-    // fs.unlinkSync(tempFilePath);
+    fs.unlinkSync(tempFilePath);
 
     console.log("✅ Ticket Email Sent Successfully:", {
       ticketId: ticketId,
@@ -893,140 +893,7 @@ The Mega Jump Team
   }
 };
 
-// ✅ TEST EMAIL ENDPOINT - For debugging iPhone email issues
-exports.testEmail = async (req, res) => {
-  try {
-    const { email } = req.body;
-    
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email address is required",
-        error: 'MISSING_EMAIL'
-      });
-    }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid email format",
-        error: 'INVALID_EMAIL_FORMAT'
-      });
-    }
-
-    const nodemailer = require('nodemailer');
-    
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      tls: {
-        ciphers: 'SSLv3',
-        rejectUnauthorized: false
-      },
-      pool: true,
-      maxConnections: 5,
-      maxMessages: 100,
-      rateLimit: 14,
-    });
-
-    // Simple test email
-    const mailOptions = {
-      from: `"Mega Jump Test" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "🧪 Test Email - Mega Jump System",
-      text: `
-Test Email from Mega Jump System
-
-This is a test email to verify email delivery on your device.
-
-Sent at: ${new Date().toLocaleString()}
-Server: ${process.env.NODE_ENV || 'development'}
-
-If you receive this email, the system is working correctly.
-
-Best regards,
-Mega Jump Team
-      `,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Test Email</title>
-        </head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5;">
-          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <h1 style="color: #2196F3; text-align: center; margin-bottom: 30px;">🧪 Test Email</h1>
-            
-            <h2 style="color: #333;">Mega Jump System Test</h2>
-            
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              This is a test email to verify email delivery on your device.
-            </p>
-            
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <h3 style="margin-top: 0; color: #333;">Test Details:</h3>
-              <p><strong>Sent at:</strong> ${new Date().toLocaleString()}</p>
-              <p><strong>Server:</strong> ${process.env.NODE_ENV || 'development'}</p>
-              <p><strong>Email:</strong> ${email}</p>
-            </div>
-            
-            <p style="color: #666; line-height: 1.6; font-size: 16px;">
-              If you receive this email, the system is working correctly.
-            </p>
-            
-            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-              <p style="color: #999; font-size: 14px; margin: 0;">
-                Best regards,<br>
-                Mega Jump Team
-              </p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-      headers: {
-        'X-Priority': '1',
-        'X-MSMail-Priority': 'High',
-        'Importance': 'high',
-        'X-Mailer': 'MegaJump-Test-System'
-      }
-    };
-
-    await transporter.sendMail(mailOptions);
-
-    console.log("✅ Test Email Sent Successfully:", {
-      email: email,
-      sentAt: new Date()
-    });
-
-    res.json({
-      success: true,
-      message: "Test email sent successfully",
-      data: {
-        email: email,
-        sentAt: new Date()
-      }
-    });
-
-  } catch (error) {
-    console.error("❌ Test Email Error:", error);
-    
-    res.status(500).json({
-      success: false,
-      message: "Failed to send test email",
-      error: error.message
-    });
-  }
-};
 
 // ✅ GET EMAIL STATISTICS - For admin monitoring
 exports.getEmailStats = async (req, res) => {
