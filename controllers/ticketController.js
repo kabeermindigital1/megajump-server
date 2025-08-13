@@ -429,6 +429,8 @@ exports.getTicketAnalytics = async (req, res) => {
       bundleSales: 0,          // Number of sales with bundles
       cashPayments: 0,
       cardPayments: 0,
+      totalCashRevenue: 0,     // Total revenue from cash payments
+      totalCardRevenue: 0,     // Total revenue from card/stripe payments
       dailyBreakdown: {},
       weeklyBreakdown: {},
       monthlyBreakdown: {},
@@ -471,8 +473,10 @@ exports.getTicketAnalytics = async (req, res) => {
       // Payment methods
       if (ticket.isCashPayment) {
         analytics.cashPayments += 1;
+        analytics.totalCashRevenue += ticket.subtotal || 0;
       } else {
         analytics.cardPayments += 1;
+        analytics.totalCardRevenue += ticket.subtotal || 0;
       }
       
       // Daily breakdown
