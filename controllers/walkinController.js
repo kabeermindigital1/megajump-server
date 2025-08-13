@@ -13,7 +13,7 @@ exports.bookWalkInTicket = async (req, res) => {
       tickets,
       socksCount = 0,
       selectedBundel,
-      isCashPayment = false,
+      isCashPayment,
       skipSlotCheck = false,
       name,
       surname,
