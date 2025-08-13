@@ -90,7 +90,7 @@ exports.bulkCreateSlots = async (req, res) => {
       if (match) {
         const date = new Date(d).toISOString().split("T")[0];
         const existingSlotsForDate = slotsByDate[date] || [];
-        const maxAllowedSlots = dayType === "weekday" ? 4 : 7;
+        const maxAllowedSlots = dayType === "weekday" ? 6 : 7;
         
         if (existingSlotsForDate.length + slots.length > maxAllowedSlots) {
           return res.status(400).json({ 

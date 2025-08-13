@@ -113,6 +113,16 @@ class EmailRetryService {
         }
       }
 
+      // Payment checks before attempting to send
+      if (ticket.paymentMethod === 'card') {
+        if (ticket.paymentStatus !== 'paid') {
+          console.log(
+            `⏸️ Skipping retry email for ticket ${ticket.ticketId} - paymentMethod is 'card' and paymentStatus is '${ticket.paymentStatus}'`
+          );
+          return;
+        }
+      }
+
              console.log(`📧 Attempting to send retry email for ticket ${ticket.ticketId} to ${ticket.email}`);
 
        // Send retry email with QR code (since original PDF is not available)
@@ -232,7 +242,7 @@ class EmailRetryService {
             <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
               <p style="margin: 0; color: #0056b3; font-size: 16px;">
                 <strong>📍 Location:</strong> Mega Jump Trampoline Park<br>
-                <strong>📞 Contact:</strong> For any questions, please contact us
+                <strong> 📧 Contact:</strong> For any questions, please contact us hello@megajumppark.eu
               </p>
             </div>
             

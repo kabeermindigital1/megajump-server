@@ -19,7 +19,7 @@ exports.bookWalkInTicket = async (req, res) => {
       surname,
       email,
       phone,
-      
+      voucherData,
     } = req.body;
 
     if (!date || !startTime || !endTime || ( !tickets && !selectedBundel) || !name || !surname || !email) {
@@ -58,8 +58,9 @@ exports.bookWalkInTicket = async (req, res) => {
     const socksPrice = settings.socksPrice;
     const totalSocksAmount = socksCount * socksPrice;
     const bundleNetPrice = selectedBundel?.price || 0;
+    const voucherDiscount = voucherData?.discountAmount || 0;
 
-    const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + ADMIN_FEE;
+    const subtotal = baseAmount + bundleNetPrice + totalSocksAmount - voucherDiscount;
 
     // Step 4: Create ticket object
     const ticket = new Ticket({
