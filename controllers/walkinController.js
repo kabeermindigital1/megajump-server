@@ -83,7 +83,7 @@ exports.bookWalkInTicket = async (req, res) => {
       surname,
       email,
       phone,
-      administrationFee: ADMIN_FEE,
+      administrationFee: isCashPayment ? 0 : ADMIN_FEE,
       addonData: {
         socksCount,
         totalAddOnAmount: totalSocksAmount,
