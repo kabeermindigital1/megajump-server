@@ -65,7 +65,8 @@ exports.bookWalkInTicket = async (req, res) => {
     const voucherDiscount = voucherData?.discountAmount || 0;
 
     const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + ADMIN_FEE - voucherDiscount;
-
+console.log(subtotal);
+console.log(ADMIN_FEE);
     // Step 4: Create ticket object
     const ticket = new Ticket({
       date,
