@@ -6,7 +6,7 @@ const {
   updateTimeSlot,
   deleteTimeSlot,
   bulkCreateSlots,
-  
+  getAllTimeSlots,
   deleteAllSlots,
   deleteSlotsByDate
 } = require('../controllers/timeSlotController');
@@ -26,12 +26,7 @@ router.post('/bulk-create', bulkCreateSlots);
 router.post('/', createTimeSlot);
 
 // ✅ Get all slots or filter by ?date
-router.get('/', async (req, res) => {
-  const { date } = req.query;
-  const query = date ? { date } : {};
-  const slots = await require('../models/TimeSlot').find(query).sort({ startTime: 1 });
-  res.json(slots);
-});
+router.get('/', getAllTimeSlots);
 
 // ✅ Get slot by ID (optional, not used in bulk)
 router.get('/:date', getTimeSlotsByDate);

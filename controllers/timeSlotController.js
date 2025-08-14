@@ -1,4 +1,5 @@
 const TimeSlot = require("../models/TimeSlot");
+const Ticket = require("../models/Ticket");
 
 // Create single time slot
 exports.createTimeSlot = async (req, res) => {
@@ -148,6 +149,70 @@ exports.deleteSlotsByDate = async (req, res) => {
     const result = await TimeSlot.deleteMany({ date });
     res.status(200).json({ success: true, deletedCount: result.deletedCount });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Get all time slots with booking statistics
+exports.getAllTimeSlots = async (req, res) => {
+  try {
+    const { date } = req.query;
+    const query = date ? { date } : {};
+    
+    // Get all time slots
+    const slots = await TimeSlot.find(query).sort({ startTime: 1 });
+    
+    // Get booking statistics for each slot
+    const slotsWithBookings = await Promise.all(
+      slots.map(async (slot) => {
+        // Count total tickets booked for this slot (excluding cancelled/refunded)
+        const bookedTickets = await Ticket.aggregate([
+          {
+            $match: {
+              date: slot.date,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              cancelTicket: { $ne: true },
+              refundStatus: { $nin: ["refunded", "failed"] }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalBooked: { $sum: "$tickets" },
+              totalHalfTimeBooked: { $sum: "$halfTimeTickets" }
+            }
+          }
+        ]);
+
+        const bookingStats = bookedTickets[0] || { totalBooked: 0, totalHalfTimeBooked: 0 };
+        const totalBooked = bookingStats.totalBooked + bookingStats.totalHalfTimeBooked;
+        const availableTickets = slot.maxTickets - totalBooked;
+
+        return {
+          _id: slot._id,
+          date: slot.date,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          maxTickets: slot.maxTickets,
+          totalBooked: totalBooked,
+          availableTickets: Math.max(0, availableTickets),
+          isFullyBooked: availableTickets <= 0
+        };
+      })
+    );
+
+    // Calculate total bookings across all slots
+    const totalBookings = slotsWithBookings.reduce((sum, slot) => sum + slot.totalBooked, 0);
+
+    res.json({
+      success: true,
+      data: slotsWithBookings,
+      totalBookings: totalBookings,
+      totalSlots: slotsWithBookings.length
+    });
+  } catch (err) {
+    console.error("❌ Get all time slots failed:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 };
