@@ -76,6 +76,7 @@ exports.bookWalkInTicket = async (req, res) => {
       name,
       isCashPayment,
       paymentMethod,
+      
       surname,
       email,
       phone,
