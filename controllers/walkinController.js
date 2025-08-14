@@ -63,7 +63,7 @@ exports.bookWalkInTicket = async (req, res) => {
     const bundleNetPrice = selectedBundel?.price || 0;
     const voucherDiscount = voucherData?.discountAmount || 0;
 
-    const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + ADMIN_FEE - voucherDiscount;
+    const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + (isCashPayment ? 0 : ADMIN_FEE) - voucherDiscount;
 
     // Step 4: Create ticket object
     const ticket = new Ticket({
