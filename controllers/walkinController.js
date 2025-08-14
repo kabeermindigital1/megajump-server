@@ -54,7 +54,7 @@ exports.bookWalkInTicket = async (req, res) => {
     }
 
     // Step 3: Calculate pricing using settings
-    const ADMIN_FEE = 2.5;
+    const ADMIN_FEE = isCashPayment ? 0 : 2.5;
     const ticketPrice = settings.ticketPrice;
     const halfTimeTicketPrice = settings.halfTimeTicketPrice || (ticketPrice * 0.6); // 60% of full price if not set
     const baseAmount = (ticketPrice * tickets) + (halfTimeTicketPrice * halfTimeTickets);
@@ -63,7 +63,7 @@ exports.bookWalkInTicket = async (req, res) => {
     const bundleNetPrice = selectedBundel?.price || 0;
     const voucherDiscount = voucherData?.discountAmount || 0;
 
-    const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + (isCashPayment ? 0 : ADMIN_FEE) - voucherDiscount;
+    const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + ADMIN_FEE - voucherDiscount;
 
     // Step 4: Create ticket object
     const ticket = new Ticket({
