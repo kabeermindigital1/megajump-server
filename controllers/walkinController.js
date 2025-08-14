@@ -11,6 +11,7 @@ exports.bookWalkInTicket = async (req, res) => {
       startTime,
       endTime,
       tickets,
+      halfTimeTickets = 0,
       socksCount = 0,
       selectedBundel,
       isCashPayment,
@@ -23,7 +24,7 @@ exports.bookWalkInTicket = async (req, res) => {
       voucherData,
     } = req.body;
 
-    if (!date || !startTime || !endTime || ( !tickets && !selectedBundel) || !name || !surname || !email) {
+    if (!date || !startTime || !endTime || ( !tickets && !halfTimeTickets && !selectedBundel) || !name || !surname || !email) {
       return res.status(400).json({ success: false, message: "Missing required booking details." });
     }
 
@@ -55,7 +56,8 @@ exports.bookWalkInTicket = async (req, res) => {
     // Step 3: Calculate pricing using settings
     const ADMIN_FEE = 2.5;
     const ticketPrice = settings.ticketPrice;
-    const baseAmount = ticketPrice * tickets;
+    const halfTimeTicketPrice = settings.halfTimeTicketPrice || (ticketPrice * 0.6); // 60% of full price if not set
+    const baseAmount = (ticketPrice * tickets) + (halfTimeTicketPrice * halfTimeTickets);
     const socksPrice = settings.socksPrice;
     const totalSocksAmount = socksCount * socksPrice;
     const bundleNetPrice = selectedBundel?.price || 0;
@@ -69,6 +71,7 @@ exports.bookWalkInTicket = async (req, res) => {
       startTime,
       endTime,
       tickets,
+      halfTimeTickets,
       socksCount,
       selectedBundel,
       amount: baseAmount,

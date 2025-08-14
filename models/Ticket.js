@@ -10,6 +10,7 @@ const ticketSchema = new mongoose.Schema({
   timestamp: Number,
 
   tickets: Number,
+  halfTimeTickets: { type: Number, default: 0 },
   amount: Number,
   subtotal: Number,
   administrationFee: Number,
