@@ -62,8 +62,8 @@ const ticketSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ["card", "cash", "qr"],
-    default: "card",
+    enum: ["card", "cash", "stripe"],
+   
   },
   qrCodePaymentUrl: String,
 
