@@ -36,10 +36,26 @@ exports.bookWalkInTicket = async (req, res) => {
       }
 
       const existing = await Ticket.aggregate([
-        { $match: { date, startTime, endTime, cancelTicket: false } },
-        { $group: { _id: null, totalSold: { $sum: "$tickets" } } },
+        { 
+          $match: { 
+            date, 
+            startTime, 
+            endTime, 
+            cancelTicket: { $ne: true },
+            refundStatus: { $nin: ["refunded", "failed"] }
+          } 
+        },
+        { 
+          $group: { 
+            _id: null, 
+            totalSold: { $sum: "$tickets" },
+            totalHalfTimeSold: { $sum: "$halfTimeTickets" },
+            totalBundelSold: { $sum: { $ifNull: ["$selectedBundel.tickets", 0] } }
+          } 
+        },
       ]);
-      const sold = existing[0]?.totalSold || 0;
+      
+      const sold = (existing[0]?.totalSold || 0) + (existing[0]?.totalHalfTimeSold || 0) + (existing[0]?.totalBundelSold || 0);
       const remaining = slot.maxTickets - sold;
 
       if (tickets > remaining) {
