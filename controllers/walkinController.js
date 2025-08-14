@@ -65,8 +65,21 @@ exports.bookWalkInTicket = async (req, res) => {
     const voucherDiscount = voucherData?.discountAmount || 0;
 
     const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + ADMIN_FEE - voucherDiscount;
-console.log(subtotal);
-console.log(ADMIN_FEE);
+    
+    // Debug logging for pricing calculation
+    console.log('🔍 Pricing Calculation Debug:');
+    console.log('  - ticketPrice:', ticketPrice);
+    console.log('  - halfTimeTicketPrice:', halfTimeTicketPrice);
+    console.log('  - tickets:', tickets);
+    console.log('  - halfTimeTickets:', halfTimeTickets);
+    console.log('  - baseAmount:', baseAmount);
+    console.log('  - bundleNetPrice:', bundleNetPrice);
+    console.log('  - socksPrice:', socksPrice);
+    console.log('  - totalSocksAmount:', totalSocksAmount);
+    console.log('  - ADMIN_FEE:', ADMIN_FEE);
+    console.log('  - voucherDiscount:', voucherDiscount);
+    console.log('  - subtotal:', subtotal);
+    console.log('  - isCashPayment:', isCashPayment);
     // Step 4: Create ticket object
     const ticket = new Ticket({
       date,
