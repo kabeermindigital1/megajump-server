@@ -61,8 +61,10 @@ exports.bookWalkInTicket = async (req, res) => {
     const baseAmount = (ticketPrice * tickets) + (halfTimeTicketPrice * halfTimeTickets);
     const socksPrice = settings.socksPrice;
     const totalSocksAmount = socksCount * socksPrice;
-    const bundleDiscount = selectedBundle ? selectedBundle.price * (selectedBundle.discountPercent / 100) : 0;
-    const bundleNetPrice = selectedBundle ? selectedBundle.price - bundleDiscount : 0; // calculatrte bundle net price without discount percent
+    // const bundleNetPrice = selectedBundel?.price || 0;
+
+    const bundleDiscount = selectedBundel ? selectedBundel.price * (selectedBundel.discountPercent / 100) : 0;
+    const bundleNetPrice = selectedBundel ? selectedBundel.price - bundleDiscount : 0;
     const voucherDiscount = voucherData?.discountAmount || 0;
 
     const subtotal = baseAmount + bundleNetPrice + totalSocksAmount + ADMIN_FEE - voucherDiscount;
