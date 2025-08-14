@@ -35,13 +35,14 @@ exports.getTimeSlotsByDate = async (req, res) => {
             $group: {
               _id: null,
               totalBooked: { $sum: "$tickets" },
-              totalHalfTimeBooked: { $sum: "$halfTimeTickets" }
+              totalHalfTimeBooked: { $sum: "$halfTimeTickets" },
+              totalBundelTickets: { $sum: { $ifNull: ["$selectedBundel.tickets", 0] } }
             }
           }
         ]);
 
-        const bookingStats = bookedTickets[0] || { totalBooked: 0, totalHalfTimeBooked: 0 };
-        const totalBooked = bookingStats.totalBooked + bookingStats.totalHalfTimeBooked;
+        const bookingStats = bookedTickets[0] || { totalBooked: 0, totalHalfTimeBooked: 0, totalBundelTickets: 0 };
+        const totalBooked = bookingStats.totalBooked + bookingStats.totalHalfTimeBooked + bookingStats.totalBundelTickets;
         const availableTickets = slot.maxTickets - totalBooked;
 
         return {
@@ -229,13 +230,14 @@ exports.getAllTimeSlots = async (req, res) => {
             $group: {
               _id: null,
               totalBooked: { $sum: "$tickets" },
-              totalHalfTimeBooked: { $sum: "$halfTimeTickets" }
+              totalHalfTimeBooked: { $sum: "$halfTimeTickets" },
+              totalBundelTickets: { $sum: { $ifNull: ["$selectedBundel.tickets", 0] } }
             }
           }
         ]);
 
-        const bookingStats = bookedTickets[0] || { totalBooked: 0, totalHalfTimeBooked: 0 };
-        const totalBooked = bookingStats.totalBooked + bookingStats.totalHalfTimeBooked;
+        const bookingStats = bookedTickets[0] || { totalBooked: 0, totalHalfTimeBooked: 0, totalBundelTickets: 0 };
+        const totalBooked = bookingStats.totalBooked + bookingStats.totalHalfTimeBooked + bookingStats.totalBundelTickets;
         const availableTickets = slot.maxTickets - totalBooked;
 
         return {
