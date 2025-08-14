@@ -15,10 +15,59 @@ exports.createTimeSlot = async (req, res) => {
 exports.getTimeSlotsByDate = async (req, res) => {
   try {
     const { date } = req.params;
-    const slots = await TimeSlot.find({ date });
-    // console.log(slots);
-    res.json({ success: true, data: slots });
+    const slots = await TimeSlot.find({ date }).sort({ startTime: 1 });
+    
+    // Get booking statistics for each slot
+    const slotsWithBookings = await Promise.all(
+      slots.map(async (slot) => {
+        // Count total tickets booked for this slot (excluding cancelled/refunded)
+        const bookedTickets = await Ticket.aggregate([
+          {
+            $match: {
+              date: slot.date,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              cancelTicket: { $ne: true },
+              refundStatus: { $nin: ["refunded", "failed"] }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalBooked: { $sum: "$tickets" },
+              totalHalfTimeBooked: { $sum: "$halfTimeTickets" }
+            }
+          }
+        ]);
+
+        const bookingStats = bookedTickets[0] || { totalBooked: 0, totalHalfTimeBooked: 0 };
+        const totalBooked = bookingStats.totalBooked + bookingStats.totalHalfTimeBooked;
+        const availableTickets = slot.maxTickets - totalBooked;
+
+        return {
+          _id: slot._id,
+          date: slot.date,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          maxTickets: slot.maxTickets,
+          totalBooked: totalBooked,
+          availableTickets: Math.max(0, availableTickets),
+          isFullyBooked: availableTickets <= 0
+        };
+      })
+    );
+
+    // Calculate total bookings across all slots
+    const totalBookings = slotsWithBookings.reduce((sum, slot) => sum + slot.totalBooked, 0);
+
+    res.json({
+      success: true,
+      data: slotsWithBookings,
+      totalBookings: totalBookings,
+      totalSlots: slotsWithBookings.length
+    });
   } catch (err) {
+    console.error("❌ Get time slots by date failed:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 };
