@@ -55,7 +55,7 @@ exports.bookWalkInTicket = async (req, res) => {
 
     // Step 3: Calculate pricing using settings
     
-    const ADMIN_FEE = isCashPayment = true ? 0 : 2.5;
+    const ADMIN_FEE = isCashPayment === true ? 0 : 2.5;
     const ticketPrice = settings.ticketPrice;
     const halfTimeTicketPrice = 9; // 60% of full price if not set
     const baseAmount = (ticketPrice * tickets) + (halfTimeTicketPrice * halfTimeTickets);
