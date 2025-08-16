@@ -474,7 +474,7 @@ exports.getTicketAnalytics = async (req, res) => {
       analytics.totalRevenue += ticket.subtotal || 0;  // Use subtotal for revenue
       
       // Bundle sales (count sales that have bundles)
-      if (ticket.selectedBundel) {
+      if (ticket.selectedBundel && ticket.selectedBundel.name) {
         analytics.bundleSales += 1;
         const bundleName = ticket.selectedBundel.name;
         analytics.bundleBreakdown[bundleName] = (analytics.bundleBreakdown[bundleName] || 0) + 1;
@@ -506,7 +506,7 @@ exports.getTicketAnalytics = async (req, res) => {
       analytics.dailyBreakdown[date].halfTimeTickets += halfTimeTickets;
       analytics.dailyBreakdown[date].socks += ticket.socksCount || 0;
       analytics.dailyBreakdown[date].revenue += ticket.subtotal || 0;
-      if (ticket.selectedBundel) {
+      if (ticket.selectedBundel && ticket.selectedBundel.name) {
         analytics.dailyBreakdown[date].bundles += 1;
       }
       
@@ -533,7 +533,7 @@ exports.getTicketAnalytics = async (req, res) => {
       analytics.weeklyBreakdown[weekKey].halfTimeTickets += halfTimeTickets;
       analytics.weeklyBreakdown[weekKey].socks += ticket.socksCount || 0;
       analytics.weeklyBreakdown[weekKey].revenue += ticket.subtotal || 0;
-      if (ticket.selectedBundel) {
+      if (ticket.selectedBundel && ticket.selectedBundel.name) {
         analytics.weeklyBreakdown[weekKey].bundles += 1;
       }
       
@@ -558,7 +558,7 @@ exports.getTicketAnalytics = async (req, res) => {
       analytics.monthlyBreakdown[monthKey].halfTimeTickets += halfTimeTickets;
       analytics.monthlyBreakdown[monthKey].socks += ticket.socksCount || 0;
       analytics.monthlyBreakdown[monthKey].revenue += ticket.subtotal || 0;
-      if (ticket.selectedBundel) {
+      if (ticket.selectedBundel && ticket.selectedBundel.name) {
         analytics.monthlyBreakdown[monthKey].bundles += 1;
       }
       
