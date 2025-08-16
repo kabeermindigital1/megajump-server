@@ -109,7 +109,7 @@ exports.deleteAllTicketsWithAuth = async (req, res) => {
 // ✅ Get all tickets
 exports.getAllTickets = async (req, res) => {
   try {
-    const tickets = await Ticket.find().sort({ createdAt: -1 });
+    const tickets = await Ticket.find().sort({ date: -1 });
     res.json({ success: true, data: tickets });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
