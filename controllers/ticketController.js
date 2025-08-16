@@ -435,9 +435,9 @@ exports.getTicketAnalytics = async (req, res) => {
       period: period,
       totalSales: 0,           // Number of sales (records)
       totalTickets: 0,         // Total individual tickets sold
+      totalHalfTimeTickets: 0, // Total half time tickets sold
       totalSocks: 0,
       totalRevenue: 0,         // Total revenue from subtotal
-      totalProfit: 0,          // Calculated profit
       bundleSales: 0,          // Number of sales with bundles
       cashPayments: 0,
       cardPayments: 0,
@@ -464,16 +464,14 @@ exports.getTicketAnalytics = async (req, res) => {
       
       // Calculate total tickets from this sale
       const regularTickets = ticket.tickets || 0;
+      const halfTimeTickets = ticket.halfTimeTickets || 0;
       const bundleTickets = ticket.selectedBundel?.tickets || 0;
-      const totalTicketsInSale = regularTickets + bundleTickets;
+      const totalTicketsInSale = regularTickets + halfTimeTickets + bundleTickets;
       
       analytics.totalTickets += totalTicketsInSale;
+      analytics.totalHalfTimeTickets += halfTimeTickets;
       analytics.totalSocks += ticket.socksCount || 0;
       analytics.totalRevenue += ticket.subtotal || 0;  // Use subtotal for revenue
-      
-      // Calculate profit (assuming 70% profit margin - adjust as needed)
-      const saleProfit = (ticket.subtotal || 0) * 0.7;
-      analytics.totalProfit += saleProfit;
       
       // Bundle sales (count sales that have bundles)
       if (ticket.selectedBundel) {
@@ -497,17 +495,17 @@ exports.getTicketAnalytics = async (req, res) => {
         analytics.dailyBreakdown[date] = {
           sales: 0,        // Number of sales
           tickets: 0,      // Total tickets
+          halfTimeTickets: 0, // Half time tickets
           socks: 0,
           revenue: 0,
-          profit: 0,
           bundles: 0
         };
       }
       analytics.dailyBreakdown[date].sales += 1;
       analytics.dailyBreakdown[date].tickets += totalTicketsInSale;
+      analytics.dailyBreakdown[date].halfTimeTickets += halfTimeTickets;
       analytics.dailyBreakdown[date].socks += ticket.socksCount || 0;
       analytics.dailyBreakdown[date].revenue += ticket.subtotal || 0;
-      analytics.dailyBreakdown[date].profit += saleProfit;
       if (ticket.selectedBundel) {
         analytics.dailyBreakdown[date].bundles += 1;
       }
@@ -523,18 +521,18 @@ exports.getTicketAnalytics = async (req, res) => {
           weekStart: weekKey,
           sales: 0,
           tickets: 0,
+          halfTimeTickets: 0,
           socks: 0,
           revenue: 0,
-          profit: 0,
           bundles: 0,
           averageDailySales: 0
         };
       }
       analytics.weeklyBreakdown[weekKey].sales += 1;
       analytics.weeklyBreakdown[weekKey].tickets += totalTicketsInSale;
+      analytics.weeklyBreakdown[weekKey].halfTimeTickets += halfTimeTickets;
       analytics.weeklyBreakdown[weekKey].socks += ticket.socksCount || 0;
       analytics.weeklyBreakdown[weekKey].revenue += ticket.subtotal || 0;
-      analytics.weeklyBreakdown[weekKey].profit += saleProfit;
       if (ticket.selectedBundel) {
         analytics.weeklyBreakdown[weekKey].bundles += 1;
       }
@@ -547,9 +545,9 @@ exports.getTicketAnalytics = async (req, res) => {
           month: monthKey,
           sales: 0,
           tickets: 0,
+          halfTimeTickets: 0,
           socks: 0,
           revenue: 0,
-          profit: 0,
           bundles: 0,
           averageDailySales: 0,
           averageWeeklySales: 0
@@ -557,9 +555,9 @@ exports.getTicketAnalytics = async (req, res) => {
       }
       analytics.monthlyBreakdown[monthKey].sales += 1;
       analytics.monthlyBreakdown[monthKey].tickets += totalTicketsInSale;
+      analytics.monthlyBreakdown[monthKey].halfTimeTickets += halfTimeTickets;
       analytics.monthlyBreakdown[monthKey].socks += ticket.socksCount || 0;
       analytics.monthlyBreakdown[monthKey].revenue += ticket.subtotal || 0;
-      analytics.monthlyBreakdown[monthKey].profit += saleProfit;
       if (ticket.selectedBundel) {
         analytics.monthlyBreakdown[monthKey].bundles += 1;
       }
