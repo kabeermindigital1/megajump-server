@@ -190,14 +190,22 @@ exports.verifyTicket = async (req, res) => {
     }
 
     // Step 4: Find ticket with timeout
-    const ticket = await Promise.race([
-      Ticket.findOne({ ticketId: cleanTicketId }),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database query timeout')), 10000)
-      )
+    const [ticket, ticketb] = await Promise.all([
+      Promise.race([
+        Ticket.findOne({ ticketId: cleanTicketId }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database query timeout')), 10000)
+        )
+      ]),
+      Promise.race([
+        require('../models/Ticketb').findOne({ ticketId: cleanTicketId }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database query timeout')), 10000)
+        )
+      ])
     ]);
 
-    if (!ticket) {
+    if (!ticket && !ticketb) {
       return res.status(404).json({ 
         success: false, 
         message: 'Ticket not found',
@@ -206,8 +214,11 @@ exports.verifyTicket = async (req, res) => {
       });
     }
 
+    // Use whichever ticket was found
+    const foundTicket = ticket || ticketb;
+
     // Step 5: Validate ticket status
-    if (ticket.cancelTicket) {
+    if (foundTicket.cancelTicket) {
       return res.status(403).json({ 
         success: false, 
         message: 'Ticket is cancelled and cannot be used',
@@ -216,13 +227,13 @@ exports.verifyTicket = async (req, res) => {
       });
     }
 
-    if (ticket.isUsed) {
+    if (foundTicket.isUsed) {
       return res.status(409).json({ 
         success: false, 
         message: 'Ticket has already been used',
         error: 'TICKET_ALREADY_USED',
         ticketId: cleanTicketId,
-        usedAt: ticket.updatedAt
+        usedAt: foundTicket.updatedAt
       });
     }
 
@@ -230,7 +241,7 @@ exports.verifyTicket = async (req, res) => {
     const currentDate = new Date();
     
     // Parse ticket date string (format: YYYY-MM-DD)
-    const ticketDateParts = ticket.date.split('-');
+    const ticketDateParts = foundTicket.date.split('-');
     const ticketYear = parseInt(ticketDateParts[0]);
     const ticketMonth = parseInt(ticketDateParts[1]) - 1; // Month is 0-indexed
     const ticketDay = parseInt(ticketDateParts[2]);
@@ -245,7 +256,7 @@ exports.verifyTicket = async (req, res) => {
     console.log("🔍 Date Validation Debug:", {
       currentDate: currentDate.toISOString(),
       currentDateOnly: currentDateOnly.toISOString(),
-      ticketDate: ticket.date,
+      ticketDate: foundTicket.date,
       ticketDateOnly: ticketDateOnly.toISOString(),
       currentDateOnlyTime: currentDateOnly.getTime(),
       ticketDateOnlyTime: ticketDateOnly.getTime(),
@@ -261,7 +272,7 @@ exports.verifyTicket = async (req, res) => {
         message: 'This ticket is not valid yet. Please scan on the correct date.',
         error: 'TICKET_DATE_NOT_REACHED',
         ticketId: cleanTicketId,
-        ticketDate: ticket.date,
+        ticketDate: foundTicket.date,
         currentDate: currentDateOnly.toISOString().split('T')[0]
       });
     }
@@ -274,14 +285,14 @@ exports.verifyTicket = async (req, res) => {
         message: 'This ticket has expired. It was only valid for the specified date.',
         error: 'TICKET_DATE_EXPIRED',
         ticketId: cleanTicketId,
-        ticketDate: ticket.date,
+        ticketDate: foundTicket.date,
         currentDate: currentDateOnly.toISOString().split('T')[0]
       });
     }
     
     // Check if scanning more than 30 minutes after start time (only if it's the correct date)
     if (currentDateOnly.getTime() === ticketDateOnly.getTime()) {
-      const startTimeParts = ticket.startTime.split(':');
+      const startTimeParts = foundTicket.startTime.split(':');
       const startHour = parseInt(startTimeParts[0]);
       const startMinute = parseInt(startTimeParts[1]);
       
@@ -296,7 +307,7 @@ exports.verifyTicket = async (req, res) => {
       const thirtyMinutesAfterStart = new Date(ticketStartTime.getTime() + (30 * 60 * 1000));
       
       console.log("🔍 Time Validation Debug:", {
-        startTime: ticket.startTime,
+        startTime: foundTicket.startTime,
         startHour: startHour,
         startMinute: startMinute,
         ticketStartTime: ticketStartTime.toISOString(),
@@ -317,8 +328,8 @@ exports.verifyTicket = async (req, res) => {
           message: 'You are late! Your ticket has expired. Please arrive on time for your booking.',
           error: 'TICKET_TIME_EXPIRED',
           ticketId: cleanTicketId,
-          ticketDate: ticket.date,
-          startTime: ticket.startTime,
+          ticketDate: foundTicket.date,
+          startTime: foundTicket.startTime,
           currentTime: currentLocalTime.toLocaleTimeString(),
           expiredAt: thirtyMinutesAfterStart.toLocaleTimeString()
         });
@@ -326,14 +337,14 @@ exports.verifyTicket = async (req, res) => {
     }
 
     // Step 7: Mark ticket as used
-    ticket.isUsed = true;
-    await ticket.save();
+    foundTicket.isUsed = true;
+    await foundTicket.save();
 
     console.log("✅ Ticket Verified Successfully:", {
       ticketId: cleanTicketId,
-      customerName: `${ticket.name} ${ticket.surname}`,
-      date: ticket.date,
-      time: `${ticket.startTime} - ${ticket.endTime}`
+      customerName: `${foundTicket.name} ${foundTicket.surname}`,
+      date: foundTicket.date,
+      time: `${foundTicket.startTime} - ${foundTicket.endTime}`
     });
 
     // Step 8: Return success response with complete ticket details
@@ -341,28 +352,28 @@ exports.verifyTicket = async (req, res) => {
       success: true, 
       message: 'Ticket verified and marked as used',
       ticket: {
-        ticketId: ticket.ticketId,
-        name: ticket.name,
-        surname: ticket.surname,
-        email: ticket.email,
-        phone: ticket.phone,
-        date: ticket.date,
-        startTime: ticket.startTime,
-        endTime: ticket.endTime,
-        tickets: ticket.tickets,
+        ticketId: foundTicket.ticketId,
+        name: foundTicket.name,
+        surname: foundTicket.surname,
+        email: foundTicket.email,
+        phone: foundTicket.phone,
+        date: foundTicket.date,
+        startTime: foundTicket.startTime,
+        endTime: foundTicket.endTime,
+        tickets: foundTicket.tickets,
         
-        subtotal: ticket.subtotal,
-        administrationFee: ticket.administrationFee,
+        subtotal: foundTicket.subtotal,
+        administrationFee: foundTicket.administrationFee,
          
-        cancellationEnabled: ticket.cancellationEnabled,
+        cancellationEnabled: foundTicket.cancellationEnabled,
       
-        addonData: ticket.addonData,
-        bundelSelected: ticket.bundelSelected,
-        selectedBundel: ticket.selectedBundel,
-        isCashPayment: ticket.isCashPayment,
-        paymentStatus: ticket.paymentStatus,
-        paymentMethod: ticket.paymentMethod,
-        isUsed: ticket.isUsed,
+        addonData: foundTicket.addonData,
+        bundelSelected: foundTicket.bundelSelected,
+        selectedBundel: foundTicket.selectedBundel,
+        isCashPayment: foundTicket.isCashPayment,
+        paymentStatus: foundTicket.paymentStatus,
+        paymentMethod: foundTicket.paymentMethod,
+        isUsed: foundTicket.isUsed,
         verifiedAt: new Date()
       }
     });
