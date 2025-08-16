@@ -291,48 +291,43 @@ exports.verifyTicket = async (req, res) => {
       });
     }
     
-    // Check if scanning more than 30 minutes after start time (only if it's the correct date)
+    // Check if scanning after the ticket end time (only if it's the correct date)
     if (currentDateOnly.getTime() === ticketDateOnly.getTime()) {
-      const startTimeParts = foundTicket.startTime.split(':');
-      const startHour = parseInt(startTimeParts[0]);
-      const startMinute = parseInt(startTimeParts[1]);
+      const endTimeParts = foundTicket.endTime.split(':');
+      const endHour = parseInt(endTimeParts[0]);
+      const endMinute = parseInt(endTimeParts[1]);
       
-      // Create ticket start time by combining the ticket date with the start time
+      // Create ticket end time by combining the ticket date with the end time
       // This ensures we're working in the local timezone
-      const ticketStartTime = new Date(ticketYear, ticketMonth, ticketDay, startHour, startMinute, 0, 0);
+      const ticketEndTime = new Date(ticketYear, ticketMonth, ticketDay, endHour, endMinute, 0, 0);
       
       // Get current time
       const currentLocalTime = new Date();
       
-      // Calculate 30 minutes after start time
-      const thirtyMinutesAfterStart = new Date(ticketStartTime.getTime() + (30 * 60 * 1000));
-      
       console.log("🔍 Time Validation Debug:", {
-        startTime: foundTicket.startTime,
-        startHour: startHour,
-        startMinute: startMinute,
-        ticketStartTime: ticketStartTime.toISOString(),
-        ticketStartTimeLocal: ticketStartTime.toLocaleString(),
-        thirtyMinutesAfterStart: thirtyMinutesAfterStart.toISOString(),
-        thirtyMinutesAfterStartLocal: thirtyMinutesAfterStart.toLocaleString(),
+        endTime: foundTicket.endTime,
+        endHour: endHour,
+        endMinute: endMinute,
+        ticketEndTime: ticketEndTime.toISOString(),
+        ticketEndTimeLocal: ticketEndTime.toLocaleString(),
         currentDate: currentDate.toISOString(),
         currentLocalTime: currentLocalTime.toLocaleString(),
-        timeDifference: currentLocalTime.getTime() - ticketStartTime.getTime(),
-        timeDifferenceMinutes: Math.floor((currentLocalTime.getTime() - ticketStartTime.getTime()) / (1000 * 60)),
-        isLate: currentLocalTime > thirtyMinutesAfterStart
+        timeDifference: currentLocalTime.getTime() - ticketEndTime.getTime(),
+        timeDifferenceMinutes: Math.floor((currentLocalTime.getTime() - ticketEndTime.getTime()) / (1000 * 60)),
+        isExpired: currentLocalTime > ticketEndTime
       });
       
-      if (currentLocalTime > thirtyMinutesAfterStart) {
-        console.log("❌ Ticket scanned too late");
+      if (currentLocalTime > ticketEndTime) {
+        console.log("❌ Ticket scanned after end time");
         return res.status(403).json({ 
           success: false, 
-          message: 'You are late! Your ticket has expired. Please arrive on time for your booking.',
+          message: 'This ticket has expired. It was only valid until the end time of your booking.',
           error: 'TICKET_TIME_EXPIRED',
           ticketId: cleanTicketId,
           ticketDate: foundTicket.date,
-          startTime: foundTicket.startTime,
+          endTime: foundTicket.endTime,
           currentTime: currentLocalTime.toLocaleTimeString(),
-          expiredAt: thirtyMinutesAfterStart.toLocaleTimeString()
+          expiredAt: ticketEndTime.toLocaleTimeString()
         });
       }
     }
