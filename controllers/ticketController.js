@@ -2,6 +2,7 @@ const Ticket = require('../models/Ticket');
 const TimeSlot = require('../models/TimeSlot');
 const { v4: uuidv4 } = require('uuid');
 const mongoose = require('mongoose'); // Added for mongoose connection check
+const Ticketb = require('../models/Ticketb');
 
 // ✅ Create ticket with slot availability check
 exports.createTicket = async (req, res) => {
@@ -109,7 +110,7 @@ exports.deleteAllTicketsWithAuth = async (req, res) => {
 // ✅ Get all tickets
 exports.getAllTickets = async (req, res) => {
   try {
-    const tickets = await Ticket.find().sort({ date: -1 });
+    const tickets = await Ticketb.find().sort({ date: -1 });
     res.json({ success: true, data: tickets });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
