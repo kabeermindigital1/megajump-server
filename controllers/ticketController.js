@@ -463,10 +463,13 @@ exports.getTicketAnalytics = async (req, res) => {
       const bundleTickets = ticket.selectedBundel?.tickets || 0;
       const totalTicketsInSale = regularTickets + halfTimeTickets + bundleTickets;
       
-      analytics.totalTickets += totalTicketsInSale;
-      analytics.totalHalfTimeTickets += halfTimeTickets;
-      analytics.totalSocks += ticket.socksCount || 0;
-      analytics.totalRevenue += ticket.subtotal || 0;  // Use subtotal for revenue
+      // Only count tickets and revenue for cash payments or paid card payments
+      if (ticket.isCashPayment || ticket.paymentStatus === 'paid') {
+        analytics.totalTickets += totalTicketsInSale;
+        analytics.totalHalfTimeTickets += halfTimeTickets;
+        analytics.totalSocks += ticket.socksCount || 0;
+        analytics.totalRevenue += ticket.subtotal || 0;  // Use subtotal for revenue
+      }
       
       // Bundle sales (count sales that have bundles)
       if (ticket.selectedBundel && ticket.selectedBundel.name) {
@@ -479,7 +482,8 @@ exports.getTicketAnalytics = async (req, res) => {
       if (ticket.isCashPayment) {
         analytics.cashPayments += 1;
         analytics.totalCashRevenue += ticket.subtotal || 0;
-      } else {
+      } else if (ticket.paymentStatus === 'paid') {
+        // Only count card payments that are actually paid
         analytics.cardPayments += 1;
         analytics.totalCardRevenue += ticket.subtotal || 0;
       }
@@ -497,10 +501,15 @@ exports.getTicketAnalytics = async (req, res) => {
         };
       }
       analytics.dailyBreakdown[date].sales += 1;
-      analytics.dailyBreakdown[date].tickets += totalTicketsInSale;
-      analytics.dailyBreakdown[date].halfTimeTickets += halfTimeTickets;
-      analytics.dailyBreakdown[date].socks += ticket.socksCount || 0;
-      analytics.dailyBreakdown[date].revenue += ticket.subtotal || 0;
+      
+      // Only count tickets, revenue, etc. for cash payments or paid card payments
+      if (ticket.isCashPayment || ticket.paymentStatus === 'paid') {
+        analytics.dailyBreakdown[date].tickets += totalTicketsInSale;
+        analytics.dailyBreakdown[date].halfTimeTickets += halfTimeTickets;
+        analytics.dailyBreakdown[date].socks += ticket.socksCount || 0;
+        analytics.dailyBreakdown[date].revenue += ticket.subtotal || 0;
+      }
+      
       if (ticket.selectedBundel && ticket.selectedBundel.name) {
         analytics.dailyBreakdown[date].bundles += 1;
       }
@@ -524,10 +533,15 @@ exports.getTicketAnalytics = async (req, res) => {
         };
       }
       analytics.weeklyBreakdown[weekKey].sales += 1;
-      analytics.weeklyBreakdown[weekKey].tickets += totalTicketsInSale;
-      analytics.weeklyBreakdown[weekKey].halfTimeTickets += halfTimeTickets;
-      analytics.weeklyBreakdown[weekKey].socks += ticket.socksCount || 0;
-      analytics.weeklyBreakdown[weekKey].revenue += ticket.subtotal || 0;
+      
+      // Only count tickets, revenue, etc. for cash payments or paid card payments
+      if (ticket.isCashPayment || ticket.paymentStatus === 'paid') {
+        analytics.weeklyBreakdown[weekKey].tickets += totalTicketsInSale;
+        analytics.weeklyBreakdown[weekKey].halfTimeTickets += halfTimeTickets;
+        analytics.weeklyBreakdown[weekKey].socks += ticket.socksCount || 0;
+        analytics.weeklyBreakdown[weekKey].revenue += ticket.subtotal || 0;
+      }
+      
       if (ticket.selectedBundel && ticket.selectedBundel.name) {
         analytics.weeklyBreakdown[weekKey].bundles += 1;
       }
@@ -549,10 +563,15 @@ exports.getTicketAnalytics = async (req, res) => {
         };
       }
       analytics.monthlyBreakdown[monthKey].sales += 1;
-      analytics.monthlyBreakdown[monthKey].tickets += totalTicketsInSale;
-      analytics.monthlyBreakdown[monthKey].halfTimeTickets += halfTimeTickets;
-      analytics.monthlyBreakdown[monthKey].socks += ticket.socksCount || 0;
-      analytics.monthlyBreakdown[monthKey].revenue += ticket.subtotal || 0;
+      
+      // Only count tickets, revenue, etc. for cash payments or paid card payments
+      if (ticket.isCashPayment || ticket.paymentStatus === 'paid') {
+        analytics.monthlyBreakdown[monthKey].tickets += totalTicketsInSale;
+        analytics.monthlyBreakdown[monthKey].halfTimeTickets += halfTimeTickets;
+        analytics.monthlyBreakdown[monthKey].socks += ticket.socksCount || 0;
+        analytics.monthlyBreakdown[monthKey].revenue += ticket.subtotal || 0;
+      }
+      
       if (ticket.selectedBundel && ticket.selectedBundel.name) {
         analytics.monthlyBreakdown[monthKey].bundles += 1;
       }
@@ -563,8 +582,8 @@ exports.getTicketAnalytics = async (req, res) => {
         analytics.refundedAmount += ticket.refundedAmount || 0;
       }
       
-      // Used tickets (count individual tickets, not sales) - only for non-cancelled tickets
-      if (!ticket.cancelTicket) {
+      // Used tickets (count individual tickets, not sales) - only for non-cancelled tickets and paid transactions
+      if (!ticket.cancelTicket && (ticket.isCashPayment || ticket.paymentStatus === 'paid')) {
         if (ticket.isUsed) {
           analytics.usedTickets += totalTicketsInSale;
         } else {
