@@ -77,6 +77,7 @@ exports.createSession = async (req, res) => {
       skipSlotCheck,
       couponCode,
       paymentStatus: 'pending',
+      paymentMethod: 'card',
       addon,
       addonData,
       metadata: {
