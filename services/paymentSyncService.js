@@ -9,7 +9,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 class PaymentSyncService {
   constructor() {
     this.isRunning = false;
-    this.dailyTimeout = null;
+    this.intervalId = null;
     this.lastRun = null;
   }
 
@@ -26,31 +26,21 @@ class PaymentSyncService {
     // Run immediately on start
     this.syncPayments();
 
-    // Schedule to run once daily at 11:59 PM (end of day)
-    this.scheduleDailySync();
+    // Schedule to run every 3 minutes
+    this.scheduleRecurringSync();
   }
 
-  // Schedule daily sync at end of day
-  scheduleDailySync() {
-    const now = new Date();
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 0, 0); // 11:59 PM
-
-    // If it's already past 11:59 PM, schedule for tomorrow
-    if (now > endOfDay) {
-      endOfDay.setDate(endOfDay.getDate() + 1);
-    }
-
-    const timeUntilEndOfDay = endOfDay.getTime() - now.getTime();
+  // Schedule recurring sync every 3 minutes
+  scheduleRecurringSync() {
+    const THREE_MINUTES = 3 * 60 * 1000; // 3 minutes in milliseconds
     
-    console.log(`📅 Next daily sync scheduled for: ${endOfDay.toLocaleString()}`);
-    console.log(`⏰ Time until next sync: ${Math.round(timeUntilEndOfDay / (1000 * 60 * 60))} hours`);
+    console.log(`📅 Payment sync scheduled to run every 3 minutes`);
+    console.log(`⏰ Next sync in: 3 minutes`);
 
-    // Schedule the daily sync
-    this.dailyTimeout = setTimeout(() => {
+    // Schedule the recurring sync
+    this.intervalId = setInterval(() => {
       this.syncPayments();
-      this.scheduleDailySync(); // Schedule next day
-    }, timeUntilEndOfDay);
+    }, THREE_MINUTES);
   }
 
   // Stop the recurring service
@@ -63,9 +53,9 @@ class PaymentSyncService {
     console.log('⏹️ Stopping Payment Sync Service...');
     this.isRunning = false;
 
-    if (this.dailyTimeout) {
-      clearTimeout(this.dailyTimeout);
-      this.dailyTimeout = null;
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
     }
   }
 
@@ -161,20 +151,14 @@ class PaymentSyncService {
 
   // Get service status
   getStatus() {
-    const now = new Date();
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 0, 0); // 11:59 PM
-
-    // If it's already past 11:59 PM, next run is tomorrow
-    if (now > endOfDay) {
-      endOfDay.setDate(endOfDay.getDate() + 1);
-    }
+    const nextRun = this.isRunning && this.lastRun ? 
+      new Date(this.lastRun.getTime() + (3 * 60 * 1000)) : null;
 
     return {
       isRunning: this.isRunning,
       lastRun: this.lastRun,
-      nextRun: this.isRunning ? endOfDay : null,
-      schedule: 'Daily at 11:59 PM (end of day)'
+      nextRun: nextRun,
+      schedule: 'Every 3 minutes'
     };
   }
 }

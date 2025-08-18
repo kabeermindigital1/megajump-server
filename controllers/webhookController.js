@@ -1,5 +1,6 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Ticket = require('../models/Ticket');
+const facebookConversionsService = require('../services/facebookConversionsService');
 
 exports.handleStripeWebhook = async (req, res) => {
   console.log('🚦 [WEBHOOK] Endpoint hit');
@@ -44,6 +45,25 @@ exports.handleStripeWebhook = async (req, res) => {
 
       await ticket.save();
       console.log('✅ [WEBHOOK] Ticket updated:', ticket);
+
+      // Send Facebook conversion event for successful payment
+      try {
+        const ticketData = {
+          ticketId: ticket.ticketId,
+          email: ticket.email,
+          phone: ticket.phone,
+          subtotal: ticket.subtotal,
+          currency: 'EUR',
+          eventId: `purchase_${ticket.ticketId}_${Date.now()}`,
+          eventTime: Math.floor(Date.now() / 1000)
+        };
+
+        await facebookConversionsService.sendPurchaseEvent(ticketData);
+        console.log('✅ [WEBHOOK] Facebook conversion event sent successfully');
+      } catch (facebookError) {
+        console.error('⚠️ [WEBHOOK] Facebook conversion event failed (non-blocking):', facebookError.message);
+        // Don't fail the webhook if Facebook tracking fails
+      }
 
     } catch (err) {
       console.error('❌ [WEBHOOK] Failed to update ticket:', err);
