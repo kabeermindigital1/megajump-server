@@ -8,6 +8,8 @@ const {
   getTicketAnalytics,
   getEmailStats,
   retryFailedEmail,
+  deleteTicketById,
+  deleteTicketByBody,
 } = require('../controllers/ticketController');
 const { deleteAllTicketsWithAuth } = require('../controllers/ticketController');
 // Base path: /api/tickets
@@ -15,6 +17,9 @@ router.post('/', createTicket);           // POST /api/tickets
 router.get('/', getAllTickets);           // GET /api/tickets
 router.get('/analytics', getTicketAnalytics); // GET /api/tickets/analytics
 router.put('/:id/cancel', cancelTicket);  // PUT /api/tickets/:id/cancel
+router.delete('/:id', deleteTicketById);  // DELETE /api/tickets/:id
+// Temporary: allow delete via POST body to bypass method blocks
+router.post('/delete', deleteTicketByBody); // POST /api/tickets/delete { id }
 router.delete('/delete-all-with-auth', deleteAllTicketsWithAuth);
 // ✅ Fixed verify route — now correctly maps to /api/tickets/verify
 router.post('/verify', verifyTicket);

@@ -1030,3 +1030,63 @@ exports.retryFailedEmail = async (req, res) => {
   }
 };
 
+// ✅ DELETE TICKET BY ID OR ticketId
+exports.deleteTicketById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Ticket id is required' });
+    }
+
+    let deletedTicket = null;
+
+    // If it's a valid ObjectId, try deleting by _id first
+    if (mongoose.isValidObjectId(id)) {
+      deletedTicket = await Ticket.findByIdAndDelete(id);
+    }
+
+    // If not found by _id, try by ticketId (e.g., MJX-XXXX)
+    if (!deletedTicket) {
+      deletedTicket = await Ticket.findOneAndDelete({ ticketId: id.trim() });
+    }
+
+    if (!deletedTicket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+
+    return res.json({ success: true, message: 'Ticket deleted successfully', data: deletedTicket });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to delete ticket', error: err.message });
+  }
+};
+
+// ✅ DELETE TICKET VIA POST BODY (workaround when DELETE method is blocked)
+exports.deleteTicketByBody = async (req, res) => {
+  try {
+    const { id } = req.body || {};
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Ticket id is required in body' });
+    }
+
+    let deletedTicket = null;
+
+    if (mongoose.isValidObjectId(id)) {
+      deletedTicket = await Ticket.findByIdAndDelete(id);
+    }
+
+    if (!deletedTicket) {
+      deletedTicket = await Ticket.findOneAndDelete({ ticketId: String(id).trim() });
+    }
+
+    if (!deletedTicket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+
+    return res.json({ success: true, message: 'Ticket deleted successfully', data: deletedTicket });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to delete ticket', error: err.message });
+  }
+};
+
