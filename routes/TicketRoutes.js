@@ -10,6 +10,8 @@ const {
   retryFailedEmail,
   deleteTicketById,
   deleteTicketByBody,
+  getUnusedTicketsToday,
+  bulkDeleteUnusedTicketsToday,
 } = require('../controllers/ticketController');
 const { deleteAllTicketsWithAuth } = require('../controllers/ticketController');
 // Base path: /api/tickets
@@ -28,4 +30,9 @@ router.post('/verify', verifyTicket);
 router.get('/email-stats', getEmailStats);
 // ✅ Manual retry failed email route
 router.post('/retry-email', retryFailedEmail);
+
+// ✅ Admin routes for unused ticket management
+router.get('/unused-today', getUnusedTicketsToday);           // GET /api/tickets/unused-today
+router.post('/bulk-delete-unused-today', bulkDeleteUnusedTicketsToday); // POST /api/tickets/bulk-delete-unused-today
+
 module.exports = router;

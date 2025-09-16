@@ -780,7 +780,7 @@ exports.sendTicketEmail = async (req, res) => {
           
           <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 0; color: #0056b3; font-size: 16px;">
-              <strong>📍 Location:</strong> Mega Jump Trampoline Park<br>
+              <strong>📍 Location:</strong> Mega Jump Trampoline Park <br>
               <strong>📞 Contact:</strong> For any questions, please contact us
             </p>
           </div>
@@ -1087,6 +1087,133 @@ exports.deleteTicketByBody = async (req, res) => {
     return res.json({ success: true, message: 'Ticket deleted successfully', data: deletedTicket });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to delete ticket', error: err.message });
+  }
+};
+
+// ✅ GET UNUSED TICKETS FOR TODAY - For admin to view and manage
+exports.getUnusedTicketsToday = async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    const unusedTickets = await Ticket.find({
+      date: today,
+      isUsed: false,
+      cancelTicket: false,
+      $or: [
+        { isCashPayment: true },
+        { paymentStatus: 'paid' }
+      ]
+    }).sort({ startTime: 1 });
+
+    const stats = {
+      totalUnusedToday: unusedTickets.length,
+      totalTicketsCount: unusedTickets.reduce((sum, ticket) => sum + (ticket.tickets || 0), 0),
+      totalHalfTimeTickets: unusedTickets.reduce((sum, ticket) => sum + (ticket.halfTimeTickets || 0), 0),
+      totalBundleTickets: unusedTickets.reduce((sum, ticket) => sum + (ticket.selectedBundel?.tickets || 0), 0),
+      totalRevenue: unusedTickets.reduce((sum, ticket) => sum + (ticket.subtotal || 0), 0)
+    };
+
+    res.json({
+      success: true,
+      data: {
+        tickets: unusedTickets,
+        stats: stats,
+        date: today
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting unused tickets for today:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch unused tickets',
+      error: error.message
+    });
+  }
+};
+
+// ✅ BULK DELETE UNUSED TICKETS FOR TODAY - Admin bulk delete functionality
+exports.bulkDeleteUnusedTicketsToday = async (req, res) => {
+  try {
+    // Admin authentication check
+    const { adminCredentials } = req.body;
+    if (!adminCredentials || !adminCredentials.username || !adminCredentials.password) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Admin credentials required' 
+      });
+    }
+
+    // Verify admin credentials
+    const Admin = require('../models/Admin');
+    const admin = await Admin.findOne({ username: adminCredentials.username });
+    
+    if (!admin || admin.password !== adminCredentials.password) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid admin credentials' 
+      });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Find all unused tickets for today
+    const unusedTickets = await Ticket.find({
+      date: today,
+      isUsed: false,
+      cancelTicket: false,
+      $or: [
+        { isCashPayment: true },
+        { paymentStatus: 'paid' }
+      ]
+    });
+
+    if (unusedTickets.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No unused tickets found for today',
+        deletedCount: 0,
+        deletedTickets: []
+      });
+    }
+
+    // Get ticket IDs for deletion
+    const ticketIds = unusedTickets.map(ticket => ticket._id);
+    
+    // Delete all unused tickets for today
+    const deleteResult = await Ticket.deleteMany({
+      _id: { $in: ticketIds }
+    });
+
+    // Calculate stats before deletion for logging
+    const stats = {
+      deletedCount: deleteResult.deletedCount,
+      totalTicketsDeleted: unusedTickets.reduce((sum, ticket) => sum + (ticket.tickets || 0), 0),
+      totalHalfTimeTicketsDeleted: unusedTickets.reduce((sum, ticket) => sum + (ticket.halfTimeTickets || 0), 0),
+      totalBundleTicketsDeleted: unusedTickets.reduce((sum, ticket) => sum + (ticket.selectedBundel?.tickets || 0), 0),
+      totalRevenueDeleted: unusedTickets.reduce((sum, ticket) => sum + (ticket.subtotal || 0), 0)
+    };
+
+    console.log(`🗑️ Admin bulk delete: ${stats.deletedCount} unused tickets deleted for ${today}`, {
+      admin: adminCredentials.username,
+      stats: stats
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully deleted ${stats.deletedCount} unused tickets for today`,
+      deletedCount: stats.deletedCount,
+      stats: stats,
+      date: today
+    });
+
+  } catch (error) {
+    console.error('Error bulk deleting unused tickets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete unused tickets',
+      error: error.message
+    });
   }
 };
 
