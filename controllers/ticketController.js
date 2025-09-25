@@ -117,6 +117,147 @@ exports.getAllTickets = async (req, res) => {
   }
 };
 
+// ✅ Get tickets by date range with sorting
+exports.getTicketsByDateRange = async (req, res) => {
+  try {
+    const { startDate, endDate, sortBy = 'date', sortOrder = 'desc' } = req.query;
+
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    
+    if (startDate && !dateRegex.test(startDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid startDate format. Use YYYY-MM-DD format.",
+        error: 'INVALID_START_DATE_FORMAT'
+      });
+    }
+
+    if (endDate && !dateRegex.test(endDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid endDate format. Use YYYY-MM-DD format.",
+        error: 'INVALID_END_DATE_FORMAT'
+      });
+    }
+
+    // Build date filter
+    let dateFilter = {};
+    
+    if (startDate && endDate) {
+      // Both dates provided - range filter
+      dateFilter = {
+        date: {
+          $gte: startDate,
+          $lte: endDate
+        }
+      };
+    } else if (startDate) {
+      // Only start date provided - from this date onwards
+      dateFilter = {
+        date: {
+          $gte: startDate
+        }
+      };
+    } else if (endDate) {
+      // Only end date provided - up to this date
+      dateFilter = {
+        date: {
+          $lte: endDate
+        }
+      };
+    }
+
+    // Validate sort parameters
+    const validSortFields = ['date', 'startTime', 'endTime', 'createdAt', 'ticketId', 'name', 'subtotal'];
+    const validSortOrders = ['asc', 'desc'];
+    
+    if (!validSortFields.includes(sortBy)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid sortBy field. Valid options: ${validSortFields.join(', ')}`,
+        error: 'INVALID_SORT_FIELD'
+      });
+    }
+
+    if (!validSortOrders.includes(sortOrder)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid sortOrder. Use 'asc' or 'desc'",
+        error: 'INVALID_SORT_ORDER'
+      });
+    }
+
+    // Build sort object
+    const sortObj = {};
+    sortObj[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    // Execute query with filters and sorting
+    const tickets = await Ticket.find(dateFilter)
+      .sort(sortObj)
+      .lean(); // Use lean() for better performance
+
+    // Calculate summary statistics
+    const stats = {
+      totalTickets: tickets.length,
+      totalTicketCount: tickets.reduce((sum, ticket) => sum + (ticket.tickets || 0), 0),
+      totalHalfTimeTickets: tickets.reduce((sum, ticket) => sum + (ticket.halfTimeTickets || 0), 0),
+      totalBundleTickets: tickets.reduce((sum, ticket) => sum + (ticket.selectedBundel?.tickets || 0), 0),
+      totalRevenue: tickets.reduce((sum, ticket) => sum + (ticket.subtotal || 0), 0),
+      cashPayments: tickets.filter(ticket => ticket.isCashPayment).length,
+      cardPayments: tickets.filter(ticket => ticket.paymentStatus === 'paid').length,
+      cancelledTickets: tickets.filter(ticket => ticket.cancelTicket).length,
+      usedTickets: tickets.filter(ticket => ticket.isUsed).length,
+      unusedTickets: tickets.filter(ticket => !ticket.isUsed && !ticket.cancelTicket).length
+    };
+
+    // Group tickets by date for easier frontend consumption
+    const ticketsByDate = {};
+    tickets.forEach(ticket => {
+      const date = ticket.date;
+      if (!ticketsByDate[date]) {
+        ticketsByDate[date] = [];
+      }
+      ticketsByDate[date].push(ticket);
+    });
+
+    // Convert to array and sort by date
+    const ticketsByDateArray = Object.entries(ticketsByDate)
+      .map(([date, dateTickets]) => ({
+        date,
+        tickets: dateTickets,
+        count: dateTickets.length,
+        totalTicketCount: dateTickets.reduce((sum, ticket) => sum + (ticket.tickets || 0), 0),
+        revenue: dateTickets.reduce((sum, ticket) => sum + (ticket.subtotal || 0), 0)
+      }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    res.json({
+      success: true,
+      data: {
+        tickets,
+        ticketsByDate: ticketsByDateArray,
+        stats,
+        filters: {
+          startDate: startDate || null,
+          endDate: endDate || null,
+          sortBy,
+          sortOrder
+        },
+        totalCount: tickets.length
+      }
+    });
+
+  } catch (error) {
+    console.error("Error getting tickets by date range:", error);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching tickets.",
+      error: error.message
+    });
+  }
+};
+
 // ✅ Cancel ticket (update flag only if allowed)
 exports.cancelTicket = async (req, res) => {
   try {

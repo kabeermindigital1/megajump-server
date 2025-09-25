@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   createTicket,
   getAllTickets,
+  getTicketsByDateRange,
   cancelTicket,
   verifyTicket,
   getTicketAnalytics,
@@ -17,6 +18,7 @@ const { deleteAllTicketsWithAuth } = require('../controllers/ticketController');
 // Base path: /api/tickets
 router.post('/', createTicket);           // POST /api/tickets
 router.get('/', getAllTickets);           // GET /api/tickets
+router.get('/by-date-range', getTicketsByDateRange); // GET /api/tickets/by-date-range
 router.get('/analytics', getTicketAnalytics); // GET /api/tickets/analytics
 router.put('/:id/cancel', cancelTicket);  // PUT /api/tickets/:id/cancel
 router.delete('/:id', deleteTicketById);  // DELETE /api/tickets/:id
